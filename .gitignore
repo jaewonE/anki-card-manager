@@ -1,0 +1,17 @@
+# Editors
+.vscode
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Generated release files
+main.js
+*.map
+
+# Obsidian plugin settings
+data.json
+
+# macOS
+.DS_Store

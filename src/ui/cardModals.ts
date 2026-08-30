@@ -1,0 +1,136 @@
+import { ButtonComponent, Modal, Notice, Setting } from 'obsidian';
+import type { App } from 'obsidian';
+import { deleteCard, updateCard } from '../cardActions';
+import { cardPreview } from '../parser';
+import type { AnkiCard, CardEdit } from '../types';
+
+export class EditCardModal extends Modal {
+	private edit: CardEdit;
+
+	constructor(
+		app: App,
+		private readonly card: AnkiCard,
+		private readonly onSaved: () => Promise<void>,
+	) {
+		super(app);
+		this.edit = {
+			cardType: card.cardType,
+			front: card.front,
+			back: card.back,
+		};
+	}
+
+	onOpen(): void {
+		this.titleEl.setText('Edit Anki card');
+		this.modalEl.addClass('anki-card-manager-modal');
+		new Setting(this.contentEl)
+			.setName('Card type')
+			.setDesc('The single line immediately after the start marker.')
+			.addText((text) =>
+				text.setValue(this.edit.cardType).onChange((value) => {
+					this.edit.cardType = value;
+				}),
+			);
+
+		this.createTextarea('Question', this.edit.front, (value) => {
+			this.edit.front = value;
+		});
+		this.createTextarea('Answer', this.edit.back, (value) => {
+			this.edit.back = value;
+		});
+
+		const source = this.contentEl.createDiv({
+			cls: 'anki-card-manager-modal-source',
+			text: `${this.card.sourcePath}:${this.card.startLine + 1}`,
+		});
+		source.setAttr('title', this.card.sourcePath);
+
+		const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+		new ButtonComponent(actions).setButtonText('Cancel').onClick(() => this.close());
+		new ButtonComponent(actions)
+			.setButtonText('Save changes')
+			.setCta()
+			.onClick(() => void this.save());
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private createTextarea(
+		label: string,
+		value: string,
+		onChange: (value: string) => void,
+	): void {
+		const field = this.contentEl.createDiv({ cls: 'anki-card-manager-modal-field' });
+		field.createEl('label', { text: label });
+		const textarea = field.createEl('textarea', {
+			cls: 'anki-card-manager-modal-textarea',
+		});
+		textarea.value = value;
+		textarea.addEventListener('input', () => onChange(textarea.value));
+	}
+
+	private async save(): Promise<void> {
+		if (this.edit.cardType.trim() === '') {
+			new Notice('Card type cannot be empty.');
+			return;
+		}
+		try {
+			await updateCard(this.app, this.card, this.edit);
+			await this.onSaved();
+			new Notice('Anki card updated.');
+			this.close();
+		} catch (error) {
+			console.error('Anki Card Manager: update failed', error);
+			new Notice(error instanceof Error ? error.message : 'Could not update the card.');
+		}
+	}
+}
+
+export class DeleteCardModal extends Modal {
+	constructor(
+		app: App,
+		private readonly card: AnkiCard,
+		private readonly onDeleted: () => Promise<void>,
+	) {
+		super(app);
+	}
+
+	onOpen(): void {
+		this.titleEl.setText('Delete Anki card?');
+		this.contentEl.createEl('p', {
+			text: 'This removes the card block directly from the source Markdown file.',
+		});
+		this.contentEl.createEl('blockquote', {
+			text: cardPreview(this.card.front) || 'Empty question',
+		});
+		this.contentEl.createDiv({
+			cls: 'anki-card-manager-modal-source',
+			text: `${this.card.sourcePath}:${this.card.startLine + 1}`,
+		});
+
+		const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
+		new ButtonComponent(actions).setButtonText('Cancel').onClick(() => this.close());
+		new ButtonComponent(actions)
+			.setButtonText('Delete')
+			.setWarning()
+			.onClick(() => void this.remove());
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+
+	private async remove(): Promise<void> {
+		try {
+			await deleteCard(this.app, this.card);
+			await this.onDeleted();
+			new Notice('Anki card deleted.');
+			this.close();
+		} catch (error) {
+			console.error('Anki Card Manager: delete failed', error);
+			new Notice(error instanceof Error ? error.message : 'Could not delete the card.');
+		}
+	}
+}

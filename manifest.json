@@ -1,0 +1,10 @@
+{
+	"id": "anki-card-manager",
+	"name": "Anki Card Manager",
+	"version": "0.1.0",
+	"minAppVersion": "1.5.0",
+	"description": "Render and manage obsidian-to-anki cards across your vault.",
+	"author": "JaewonE",
+	"authorUrl": "https://github.com/jaewonE",
+	"isDesktopOnly": false
+}
