@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Add 12px left padding to the results toolbar while retaining the existing grouping-only collapse/expand controls.
+- Keep table columns and headers on narrow screens; scroll each table horizontally, including nested groups, with keyboard-accessible scroll regions.
+- Keep Question and Source text at its normal color without underlines on hover/focus, preserving keyboard focus indicators.
+- Add table structure and narrow-pane/viewport regression fixtures; update equivalent English/Korean usage documentation.
+
 ## 0.2.1
 
 - Keep Registered buttons blue and Unregistered buttons red to match card icons, including hover/focus and brighter dark-mode colors.

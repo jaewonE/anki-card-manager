@@ -1,6 +1,6 @@
 {
 	"name": "anki-card-manager",
-	"version": "0.2.1",
+	"version": "0.2.2",
 	"description": "Render and manage obsidian-to-anki cards across an Obsidian vault.",
 	"main": "main.js",
 	"type": "module",

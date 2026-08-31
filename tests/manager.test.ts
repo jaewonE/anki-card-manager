@@ -394,6 +394,26 @@ test('selection toolbar puts checkbox before its label and collapse control dire
 	} finally { await close(); }
 });
 
+test('flat and nested tables retain all columns inside keyboard-accessible scroll regions', async () => {
+	const { container, close } = await openView();
+	try {
+		const assertTables = (): void => {
+			const tables = [...container.querySelectorAll('table')];
+			assert.ok(tables.length);
+			for (const table of tables) {
+				assert.equal(table.parentElement!.getAttribute('role'), 'region');
+				assert.equal(table.parentElement!.getAttribute('tabindex'), '0');
+				assert.equal(table.parentElement!.getAttribute('aria-label'), 'Anki cards table');
+				assert.equal(table.querySelectorAll('thead th').length, 8);
+				for (const row of table.querySelectorAll('tbody tr')) assert.equal(row.children.length, 8);
+			}
+		};
+		assertTables();
+		button(container, 'Group by deck hierarchy').click(); button(container, 'Group by tag').click();
+		assertTables();
+	} finally { await close(); }
+});
+
 test('question opens type dropdown editor; Basic conversion uses the shared cloze conversion and cancel writes nothing', async () => {
 	const source = yaml + '<START_ANKI>\nCloze\nCloze question\nText:\n{{c1::**answer**}} {{c2:tail}}\n<!--ID: 123-->\n<END_ANKI>\n';
 	const { container, sources, writes, close } = await openView(new Map([['a.md', source]]));

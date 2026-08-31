@@ -8,7 +8,8 @@ export interface TableActions {
 }
 
 export function renderTable(container: HTMLElement, cards: AnkiCard[], actions: TableActions): void {
-	const wrapper = container.createDiv({ cls: 'anki-card-manager-table-wrapper' });
+	const wrapper = container.createDiv({ cls: 'anki-card-manager-table-wrapper',
+		attr: { role: 'region', 'aria-label': 'Anki cards table', tabindex: '0' } });
 	const table = wrapper.createEl('table', { cls: 'anki-card-manager-table' });
 	const header = table.createEl('thead').createEl('tr');
 	actions.select(header.createEl('th'), cards, 'Select all cards in table');

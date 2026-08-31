@@ -52,10 +52,20 @@ createServer((request, response) => {
 	response.setHeader('Content-Type', request.url?.endsWith('.js') ? 'text/javascript' : 'text/html; charset=utf-8');
 	const managerHtml = html.slice(0, html.indexOf('<body>')) + `<body><style>
 	body{max-width:1400px}*{box-sizing:border-box}button,input,select,textarea{font:inherit;color:var(--text-normal);background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:5px;padding:7px}button:disabled{opacity:.4}button{cursor:pointer}input[type=checkbox]{width:16px;height:16px}svg{width:18px;height:18px}button svg{display:block}:root{--text-on-accent:#fff;--color-green:#398851;--text-error:#d84c4c;--text-faint:#888}.modal{position:fixed;z-index:100;left:50%;top:50%;transform:translate(-50%,-50%);max-height:90vh;overflow:auto;background:var(--background-primary);padding:24px;box-shadow:0 0 0 200vmax #0008;border:1px solid var(--background-modifier-border);border-radius:10px}.modal-button-container{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}pre{white-space:pre-wrap}
-	</style><p>Manager UI regression · Real manager code, sample documents and stubbed Obsidian APIs.</p><label><input id="dark" type="checkbox">Dark mode</label><output id="manager-status"></output><div id="manager"></div><details><summary>Inspect sample source files</summary><div id="sample-sources"></div></details><script src="/manager.js"></script></body></html>`;
+	/* Host theme interaction rules must not recolor or underline table links. */
+	#manager{max-width:100%}
+	.anki-card-manager-table button:hover,.anki-card-manager-table button:focus{color:var(--text-accent);text-decoration:underline}
+	</style><p>Manager UI regression · Real manager code, sample documents and stubbed Obsidian APIs.</p><label><input id="dark" type="checkbox">Dark mode</label>
+	<label>Pane width <select id="pane-width"><option value="100%">Auto</option><option value="320px">320</option><option value="390px">390</option><option value="640px">640</option><option value="1024px">1024</option></select></label>
+	<output id="manager-status"></output><div id="manager"></div><details><summary>Inspect sample source files</summary><div id="sample-sources"></div></details><script src="/manager.js"></script></body></html>`;
 	const readingHtml = managerHtml.slice(0, managerHtml.indexOf('<p>Manager UI regression')) + `<h1>Reading view regression</h1><p>Sample-only reading sections and confirmed collection. No real Vault access.</p><label><input id="dark" type="checkbox">Dark mode</label><button id="collect">Collect sample cards</button><output id="reading-status"></output><div id="reading" class="markdown-preview-view markdown-rendered"></div><details><summary>Inspect sample source</summary><pre id="reading-source"></pre></details><script src="/reading.js"></script></body></html>`;
-	response.end(request.url === '/editor.js' ? result.outputFiles[0].text : request.url === '/manager.js' ? manager.outputFiles[0].text : request.url === '/reading.js' ? reading.outputFiles[0].text : request.url === '/manager' ? managerHtml : request.url === '/reading' ? readingHtml : html);
+	const responsiveHtml = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Manager responsive regression</title>
+	<style>body{font-family:system-ui;margin:16px}iframe{display:block;width:390px;height:1800px;border:1px solid #aaa;margin-top:12px}</style>
+	<h1>Manager responsive regression</h1><label>Preview width <select id="width"><option>320</option><option selected>390</option><option>640</option><option>1024</option></select></label>
+	<iframe title="Manager preview" src="/manager"></iframe><script>document.querySelector('#width').addEventListener('change',event=>{document.querySelector('iframe').style.width=event.target.value+'px'});</script></html>`;
+	response.end(request.url === '/editor.js' ? result.outputFiles[0].text : request.url === '/manager.js' ? manager.outputFiles[0].text : request.url === '/reading.js' ? reading.outputFiles[0].text : request.url === '/manager' ? managerHtml : request.url === '/manager-responsive' ? responsiveHtml : request.url === '/reading' ? readingHtml : html);
 }).listen(0, '127.0.0.1', function () {
 	console.log(`Editor QA: http://127.0.0.1:${this.address().port}`);
 	console.log(`Manager QA: http://127.0.0.1:${this.address().port}/manager`);
+	console.log(`Responsive QA: http://127.0.0.1:${this.address().port}/manager-responsive`);
 });

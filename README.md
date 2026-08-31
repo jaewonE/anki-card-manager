@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.1**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.2**.
 
 ## Features
 
@@ -93,11 +93,13 @@ Source edits are direct vault writes. Keep normal backups or source control, esp
 
 The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
 
-The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar. **전체 접기** (Collapse all) appears whenever any group is open, including descendants. Otherwise **전체 펼치기** (Expand all) opens every group.
+The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar, padded 12px on the left. Group controls appear only when grouping is enabled and there are matching cards: **전체 접기** (Collapse all) appears whenever any group is open, including descendants; otherwise **전체 펼치기** (Expand all) opens every group.
+
+Tables keep their columns and headers at every screen width, including inside nested groups. On narrow screens or panes, scroll each table horizontally instead of switching to a stacked key-value layout. The table's scroll region also accepts keyboard focus for horizontal arrow-key scrolling.
 
 **Search/Filter** contains the search box, its immediately adjacent **AND/OR** button, and compact **All statuses / All card types** dropdowns. AND is blue and OR is orange, with brighter dark-mode colors. Dropdowns fit the selected text so search takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons and a pale blue panel. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. **Sampling** uses a pale green panel and the same label size. The header alone shows the filtered/total count.
 
-Question and Source links share a lightly padded, bright background with subtly rounded corners. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
+Question and Source links share a lightly padded, bright background with subtly rounded corners. Hover and focus retain the normal text color without an underline; keyboard focus indicators remain available. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
 The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) rescans current Vault Markdown, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization.
 
@@ -207,7 +209,7 @@ Additional regressions cover type menus and live-editor registration, Cloze unwr
 
 Source/Live Preview transitions, Reading-view section boundaries/lifecycle, bottom-entry ArrowUp, physical collection/idempotence/footnotes, placement confirmation/recovery, independent group sampling modes, comma and global AND/OR search, and modal source navigation have regression coverage. Tests use sample documents, never real Vault notes.
 
-For browser layout checks, run `npm run test:browser` and open the printed editor, `/manager`, or `/reading` URL. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
+For browser layout checks, run `npm run test:browser` and open the printed editor, `/manager`, `/manager-responsive`, or `/reading` URL. Manager fixtures offer narrow pane and 320/390/640/1024px viewport checks. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
 
 ## License
 

@@ -33,6 +33,10 @@ void view.onOpen();
 document.querySelector<HTMLInputElement>('#dark')!.addEventListener('change', (event) => {
 	document.body.classList.toggle('theme-dark', (event.target as HTMLInputElement).checked);
 });
+document.querySelector<HTMLSelectElement>('#pane-width')!.addEventListener('change', (event) => {
+	const manager = document.querySelector<HTMLElement>('#manager')!;
+	manager.style.width = (event.target as HTMLSelectElement).value;
+});
 function updateSources(): void {
 	const container = document.querySelector<HTMLElement>('#sample-sources')!;
 	container.empty();
