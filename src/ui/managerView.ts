@@ -1,76 +1,53 @@
-import {
-	ItemView,
-	MarkdownView,
-	Notice,
-	TFile,
-	WorkspaceLeaf,
-	debounce,
-	setIcon,
-} from 'obsidian';
+import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf, debounce } from 'obsidian';
 import { toggleCardRegistration } from '../cardActions';
-import { cardMetadataForFile } from '../metadata';
-import { cardPreview, parseAnkiCards } from '../parser';
+import type { BulkAction } from '../bulkActions';
+import { cardMetadataFromSource } from '../metadata';
+import { collectGroupCards, groupCards, selectionState } from '../managerModel';
+import type { CardGroup, RegistrationFilter } from '../managerModel';
+import { matchesSearch, parseSearch } from '../managerSearch';
+import { parseAnkiCards } from '../parser';
 import type { AnkiCard } from '../types';
+import { BulkActionModal } from './bulkModal';
 import { DeleteCardModal, EditCardModal } from './cardModals';
+import { iconButton, renderTable } from './managerTable';
 
 export const ANKI_MANAGER_VIEW_TYPE = 'anki-card-manager-view';
-
-type RegistrationFilter = 'all' | 'registered' | 'unregistered';
-type GroupMode = 'none' | 'tags';
-
-const REGISTRATION_OPTIONS: { value: RegistrationFilter; label: string }[] = [
-	{ value: 'all', label: 'All statuses' },
-	{ value: 'registered', label: 'Registered markers' },
-	{ value: 'unregistered', label: 'Unregistered markers' },
-];
-
-const GROUP_OPTIONS: { value: GroupMode; label: string }[] = [
-	{ value: 'none', label: 'Flat table' },
-	{ value: 'tags', label: 'Group by tag hierarchy' },
-];
-
-interface TagNode {
-	name: string;
-	children: Map<string, TagNode>;
-	cards: AnkiCard[];
-}
 
 export class AnkiManagerView extends ItemView {
 	private cards: AnkiCard[] = [];
 	private query = '';
 	private registrationFilter: RegistrationFilter = 'all';
-	private groupMode: GroupMode = 'none';
+	private byDeck = false;
+	private byTag = false;
+	private selected = new Set<string>();
+	private groupOpen = new Map<string, boolean>();
+	private checkboxes: { element: HTMLInputElement; cards: AnkiCard[] }[] = [];
+	private bulkButtons: HTMLButtonElement[] = [];
 	private opened = false;
 	private refreshSequence = 0;
-	private readonly scheduleRefresh = debounce(
-		() => void this.refresh(),
-		350,
-		true,
-	);
+	private scanFailures = 0;
+	private results!: HTMLElement;
+	private subtitle!: HTMLElement;
+	private count!: HTMLElement;
+	private selectionCount!: HTMLElement;
+	private search!: HTMLInputElement;
+	private status!: HTMLSelectElement;
+	private deckButton!: HTMLButtonElement;
+	private tagButton!: HTMLButtonElement;
+	private syncButton!: HTMLButtonElement;
+	private readonly scheduleRefresh = debounce(() => { if (this.opened) void this.refresh(); }, 350, true);
 
-	constructor(leaf: WorkspaceLeaf) {
-		super(leaf);
-	}
-
-	getViewType(): string {
-		return ANKI_MANAGER_VIEW_TYPE;
-	}
-
-	getDisplayText(): string {
-		return 'Anki card manager';
-	}
-
-	getIcon(): string {
-		return 'library-big';
-	}
+	constructor(leaf: WorkspaceLeaf) { super(leaf); }
+	getViewType(): string { return ANKI_MANAGER_VIEW_TYPE; }
+	getDisplayText(): string { return 'Anki card manager'; }
+	getIcon(): string { return 'library-big'; }
 
 	async onOpen(): Promise<void> {
 		this.opened = true;
-		this.registerEvent(
-			this.app.vault.on('modify', (file) => {
-				if (file instanceof TFile && file.extension === 'md') this.scheduleRefresh();
-			}),
-		);
+		this.createView();
+		this.registerEvent(this.app.vault.on('modify', (file) => {
+			if (file instanceof TFile && file.extension === 'md') this.scheduleRefresh();
+		}));
 		this.registerEvent(this.app.vault.on('create', () => this.scheduleRefresh()));
 		this.registerEvent(this.app.vault.on('delete', () => this.scheduleRefresh()));
 		this.registerEvent(this.app.vault.on('rename', () => this.scheduleRefresh()));
@@ -79,309 +56,175 @@ export class AnkiManagerView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.opened = false;
+		this.refreshSequence += 1;
+		this.checkboxes = [];
+		this.cards = [];
+		this.selected.clear();
 	}
 
 	async refresh(): Promise<void> {
 		const sequence = ++this.refreshSequence;
-		const files = this.app.vault.getMarkdownFiles();
-		const perFile = await Promise.all(
-			files.map(async (file) => {
-				try {
-					const source = await this.app.vault.cachedRead(file);
-					return parseAnkiCards(
-						source,
-						file.path,
-						cardMetadataForFile(this.app, file),
-					);
-				} catch {
-					return [];
-				}
-			}),
-		);
-		if (sequence !== this.refreshSequence) return;
-		this.cards = perFile.flat().sort((left, right) =>
-			left.sourcePath === right.sourcePath
-				? left.startLine - right.startLine
-				: left.sourcePath.localeCompare(right.sourcePath),
-		);
-		if (this.opened) this.renderView();
+		if (this.syncButton) this.syncButton.disabled = true;
+		let failures = 0;
+		const perFile = await Promise.all(this.app.vault.getMarkdownFiles().map(async (file) => {
+			try {
+				const source = await this.app.vault.cachedRead(file);
+				// YAML and cards must come from one snapshot, not a lagging metadata cache.
+				return parseAnkiCards(source, file.path, cardMetadataFromSource(source));
+			} catch { failures += 1; return []; }
+		}));
+		if (sequence !== this.refreshSequence || !this.opened) return;
+		const previous = new Map(this.cards.map((card) => [card.key, card.raw]));
+		this.cards = perFile.flat().sort((a, b) => a.sourcePath.localeCompare(b.sourcePath) || a.startLine - b.startLine);
+		this.selected = new Set(this.cards.filter((card) => this.selected.has(card.key) && previous.get(card.key) === card.raw).map((card) => card.key));
+		this.scanFailures = failures;
+		this.syncButton.disabled = false;
+		this.renderResults();
 	}
 
-	private renderView(): void {
+	private createView(): void {
 		const container = this.contentEl;
 		container.empty();
 		container.addClass('anki-card-manager-view');
-
 		const header = container.createDiv({ cls: 'anki-card-manager-header' });
-		const titleBlock = header.createDiv();
-		titleBlock.createEl('h2', { text: 'Anki card manager' });
-		titleBlock.createDiv({
-			cls: 'anki-card-manager-subtitle',
-			text: `${this.cards.length} cards across the vault`,
-		});
-		const refreshButton = header.createEl('button', {
-			cls: 'clickable-icon',
-			attr: { 'aria-label': 'Rescan vault' },
-		});
-		setIcon(refreshButton, 'refresh-cw');
-		refreshButton.addEventListener('click', () => void this.refresh());
-
-		this.renderControls(container);
-		const filtered = this.filteredCards();
-		container.createDiv({
-			cls: 'anki-card-manager-results-count',
-			text: `${filtered.length} matching cards`,
-		});
-
-		if (filtered.length === 0) {
-			const empty = container.createDiv({ cls: 'anki-card-manager-empty' });
-			setIcon(empty.createSpan(), 'files');
-			empty.createEl('h3', { text: 'No cards found' });
-			empty.createEl('p', {
-				text: 'Insert <START_ANKI> in a Markdown file or change the filters above.',
-			});
-			return;
-		}
-
-		if (this.groupMode === 'tags') {
-			this.renderTagGroups(container, filtered);
-		} else {
-			this.renderTable(container, filtered);
-		}
-	}
-
-	private renderControls(container: HTMLElement): void {
+		const title = header.createDiv();
+		title.createEl('h2', { text: 'Anki card manager' });
+		this.subtitle = title.createDiv({ cls: 'anki-card-manager-subtitle' });
+		const headerActions = header.createDiv({ cls: 'anki-card-manager-header-actions' });
+		iconButton(headerActions, 'rotate-ccw', 'Reset search, filters, grouping and selection', () => this.reset());
+		this.syncButton = iconButton(headerActions, 'arrow-right-left', 'Sync manager with vault (does not sync Anki)', () => void this.refresh());
 		const controls = container.createDiv({ cls: 'anki-card-manager-controls' });
-		const search = controls.createEl('input', {
-			type: 'search',
-			placeholder: 'Search question, answer, path, deck, or tag',
-			value: this.query,
-			attr: { 'aria-label': 'Search cards' },
-		});
-		search.addEventListener('input', () => {
-			this.query = search.value;
-			this.renderView();
-		});
-
-		const status = controls.createEl('select', {
-			attr: { 'aria-label': 'Filter registration status' },
-		});
-		for (const option of REGISTRATION_OPTIONS) {
-			this.addOption(status, option.value, option.label);
+		this.search = controls.createEl('input', { type: 'search',
+			placeholder: 'Search · tags:Inbox · deck:Mother::Child · type:Cloze', attr: { 'aria-label': 'Search cards' } });
+		this.search.addEventListener('input', () => { this.query = this.search.value; this.renderResults(); });
+		this.status = controls.createEl('select', { attr: { 'aria-label': 'Filter registration status' } });
+		for (const [value, text] of [['all', 'All statuses'], ['registered', 'Registered markers'], ['unregistered', 'Unregistered markers']]) {
+			this.status.createEl('option', { value, text });
 		}
-		status.value = this.registrationFilter;
-		status.addEventListener('change', () => {
-			this.registrationFilter = status.value as RegistrationFilter;
-			this.renderView();
-		});
-
-		const grouping = controls.createEl('select', {
-			attr: { 'aria-label': 'Group cards' },
-		});
-		for (const option of GROUP_OPTIONS) {
-			this.addOption(grouping, option.value, option.label);
+		this.status.addEventListener('change', () => { this.registrationFilter = this.status.value as RegistrationFilter; this.renderResults(); });
+		const grouping = controls.createDiv({ cls: 'anki-card-manager-group-controls' });
+		this.deckButton = grouping.createEl('button', { text: 'Group by deck hierarchy', attr: { 'aria-pressed': 'false' } });
+		this.tagButton = grouping.createEl('button', { text: 'Group by tag', attr: { 'aria-pressed': 'false' } });
+		this.deckButton.addEventListener('click', () => { this.byDeck = !this.byDeck; this.updateGroupButtons(); this.renderResults(); });
+		this.tagButton.addEventListener('click', () => { this.byTag = !this.byTag; this.updateGroupButtons(); this.renderResults(); });
+		this.count = container.createDiv({ cls: 'anki-card-manager-results-count', attr: { role: 'status' } });
+		const bulk = container.createDiv({ cls: 'anki-card-manager-bulk-actions' });
+		this.selectionCount = bulk.createSpan();
+		this.bulkButtons = [];
+		for (const [kind, label] of [['register', 'Register'], ['unregister', 'Unregister'], ['tags', 'Change tags'], ['deck', 'Change deck'], ['delete', 'Delete']] as const) {
+			const button = bulk.createEl('button', { text: label, attr: { 'aria-label': `${label} selected cards` } });
+			button.addEventListener('click', () => this.openBulk(kind));
+			this.bulkButtons.push(button);
 		}
-		grouping.value = this.groupMode;
-		grouping.addEventListener('change', () => {
-			this.groupMode = grouping.value as GroupMode;
-			this.renderView();
-		});
+		const clear = bulk.createEl('button', { text: 'Clear selection' });
+		clear.addEventListener('click', () => { this.selected.clear(); this.updateSelection(); });
+		this.results = container.createDiv({ cls: 'anki-card-manager-results' });
 	}
 
-	private addOption(select: HTMLSelectElement, value: string, label: string): void {
-		select.createEl('option', { value, text: label });
+	private reset(): void {
+		this.query = this.search.value = '';
+		this.registrationFilter = 'all';
+		this.status.value = 'all';
+		this.byDeck = this.byTag = false;
+		this.selected.clear();
+		this.groupOpen.clear();
+		this.updateGroupButtons();
+		this.renderResults();
 	}
 
-	private filteredCards(): AnkiCard[] {
-		const query = this.query.trim().toLocaleLowerCase();
-		return this.cards.filter((card) => {
-			if (
-				this.registrationFilter !== 'all' &&
-				(card.registered ? 'registered' : 'unregistered') !==
-					this.registrationFilter
-			) {
-				return false;
-			}
-			if (!query) return true;
-			return [
-				card.front,
-				card.back,
-				card.cardType,
-				card.deck,
-				card.tags.join(' '),
-				card.sourcePath,
-			].some((value) => value.toLocaleLowerCase().includes(query));
-		});
+	private updateGroupButtons(): void {
+		this.deckButton.setAttribute('aria-pressed', String(this.byDeck));
+		this.tagButton.setAttribute('aria-pressed', String(this.byTag));
 	}
 
-	private renderTagGroups(container: HTMLElement, cards: AnkiCard[]): void {
-		const tree = this.buildTagTree(cards);
-		const groups = container.createDiv({ cls: 'anki-card-manager-tag-groups' });
-		for (const node of [...tree.values()].sort((a, b) => a.name.localeCompare(b.name))) {
-			this.renderTagNode(groups, node, 0);
+	private renderResults(): void {
+		const terms = parseSearch(this.query);
+		const filtered = this.cards.filter((card) => matchesSearch(card, terms) && (this.registrationFilter === 'all' ||
+			(card.registered ? 'registered' : 'unregistered') === this.registrationFilter));
+		// Filtering never leaves invisible rows armed for a destructive bulk operation.
+		const visible = new Set(filtered.map((card) => card.key));
+		this.selected = new Set([...this.selected].filter((key) => visible.has(key)));
+		this.subtitle.setText(`${this.cards.length} cards across the vault${this.scanFailures ? ` · ${this.scanFailures} files could not be read (check YAML)` : ''}`);
+		this.count.setText(`${filtered.length} matching cards${this.byTag ? ' · Multi-tag cards appear in each tag group; counts and selection are unique.' : ''}`);
+		this.results.empty();
+		this.checkboxes = [];
+		if (!filtered.length) this.results.createDiv({ cls: 'anki-card-manager-empty', text: 'No cards found. Change the filters or insert <START_ANKI> in a Markdown file.' });
+		else {
+			const selectAll = this.results.createEl('label', { cls: 'anki-card-manager-select-all', text: 'Select all matching cards ' });
+			this.selectionBox(selectAll, filtered, 'Select all matching cards');
+			if (this.byDeck || this.byTag) {
+				const groups = this.results.createDiv({ cls: 'anki-card-manager-tag-groups' });
+				for (const group of groupCards(filtered, this.byDeck, this.byTag)) this.renderGroup(groups, group, 0);
+			} else this.table(this.results, filtered);
 		}
+		this.updateSelection();
 	}
 
-	private buildTagTree(cards: AnkiCard[]): Map<string, TagNode> {
-		const roots = new Map<string, TagNode>();
-		for (const card of cards) {
-			const tags = card.tags.length > 0 ? [...new Set(card.tags)] : ['Untagged'];
-			for (const tag of tags) {
-				const parts = tag.replace(/^#/, '').split('/').filter(Boolean);
-				const safeParts = parts.length > 0 ? parts : ['Untagged'];
-				let level = roots;
-				let node: TagNode | undefined;
-				for (const part of safeParts) {
-					node = level.get(part);
-					if (!node) {
-						node = { name: part, children: new Map(), cards: [] };
-						level.set(part, node);
-					}
-					level = node.children;
-				}
-				node?.cards.push(card);
-			}
-		}
-		return roots;
-	}
-
-	private renderTagNode(container: HTMLElement, node: TagNode, depth: number): void {
-		const details = container.createEl('details', {
-			cls: 'anki-card-manager-tag-group',
-		});
-		details.open = depth < 1;
-		details.createEl('summary', {
-			text: `${node.name} (${this.countNodeCards(node)})`,
-		});
+	private renderGroup(container: HTMLElement, group: CardGroup, depth: number): void {
+		const cards = collectGroupCards(group);
+		const details = container.createEl('details', { cls: 'anki-card-manager-tag-group' });
+		details.dataset.groupKind = group.kind;
+		details.open = this.groupOpen.get(group.key) ?? depth < 2;
+		details.addEventListener('toggle', () => { if (details.isConnected) this.groupOpen.set(group.key, details.open); });
+		const summary = details.createEl('summary');
+		this.selectionBox(summary, cards, `Select ${group.kind} group: ${group.name}`);
+		summary.createSpan({ text: `${group.name} (${cards.length})` });
 		const body = details.createDiv({ cls: 'anki-card-manager-tag-group-body' });
-		for (const child of [...node.children.values()].sort((a, b) =>
-			a.name.localeCompare(b.name),
-		)) {
-			this.renderTagNode(body, child, depth + 1);
+		if (group.cards.length) this.table(body, group.cards);
+		for (const child of group.children) this.renderGroup(body, child, depth + 1);
+	}
+
+	private selectionBox(container: HTMLElement, cards: AnkiCard[], label: string): void {
+		const element = container.createEl('input', { type: 'checkbox', attr: { 'aria-label': label } });
+		element.addEventListener('click', (event) => event.stopPropagation());
+		element.addEventListener('keydown', (event) => event.stopPropagation());
+		element.addEventListener('change', () => {
+			for (const card of cards) { if (element.checked) this.selected.add(card.key); else this.selected.delete(card.key); }
+			this.updateSelection();
+		});
+		this.checkboxes.push({ element, cards });
+	}
+
+	private updateSelection(): void {
+		for (const { element, cards } of this.checkboxes) {
+			const state = selectionState(cards, this.selected);
+			element.checked = state.checked;
+			element.indeterminate = state.indeterminate;
+			element.setAttribute('aria-checked', state.indeterminate ? 'mixed' : String(state.checked));
 		}
-		if (node.cards.length > 0) this.renderTable(body, node.cards);
+		this.selectionCount.setText(`${this.selected.size} selected`);
+		for (const button of this.bulkButtons) button.disabled = this.selected.size === 0;
 	}
 
-	private countNodeCards(node: TagNode): number {
-		const keys = new Set(node.cards.map((card) => card.key));
-		for (const child of node.children.values()) {
-			for (const card of this.collectNodeCards(child)) keys.add(card.key);
-		}
-		return keys.size;
-	}
-
-	private collectNodeCards(node: TagNode): AnkiCard[] {
-		return [
-			...node.cards,
-			...[...node.children.values()].flatMap((child) =>
-				this.collectNodeCards(child),
-			),
-		];
-	}
-
-	private renderTable(container: HTMLElement, cards: AnkiCard[]): void {
-		const wrapper = container.createDiv({ cls: 'anki-card-manager-table-wrapper' });
-		const table = wrapper.createEl('table', { cls: 'anki-card-manager-table' });
-		const header = table.createEl('thead').createEl('tr');
-		for (const label of ['Question', 'Answer', 'Type / deck', 'Tags', 'Source', 'Status', 'Actions']) {
-			header.createEl('th', { text: label });
-		}
-		const body = table.createEl('tbody');
-		for (const card of cards) this.renderRow(body, card);
-	}
-
-	private renderRow(body: HTMLTableSectionElement, card: AnkiCard): void {
-		const row = body.createEl('tr');
-		this.cell(row, 'Question', cardPreview(card.front) || 'Empty question');
-		this.cell(row, 'Answer', cardPreview(card.back) || 'Empty answer');
-		this.cell(row, 'Type / deck', `${card.cardType}\n${card.deck || 'No deck'}`);
-		this.cell(row, 'Tags', card.tags.join(' / ') || 'Untagged');
-
-		const sourceCell = row.createEl('td', { attr: { 'data-label': 'Source' } });
-		const sourceButton = sourceCell.createEl('button', {
-			cls: 'anki-card-manager-source-link',
-			text: `${card.sourcePath}:${card.startLine + 1}`,
+	private table(container: HTMLElement, cards: AnkiCard[]): void {
+		renderTable(container, cards, {
+			select: (parent, group, label) => this.selectionBox(parent, group, label),
+			open: (card) => void this.openSource(card),
+			edit: (card) => new EditCardModal(this.app, card, () => this.refresh()).open(),
+			toggle: (card) => void this.toggleRegistration(card),
+			delete: (card) => new DeleteCardModal(this.app, card, () => this.refresh()).open(),
 		});
-		sourceButton.addEventListener('click', () => void this.openSource(card));
-
-		const statusCell = row.createEl('td', { attr: { 'data-label': 'Status' } });
-		statusCell.createSpan({
-			cls: ['anki-card-manager-status', card.registered ? 'is-on' : 'is-off'],
-			text: card.registered ? 'Registered' : 'Unregistered',
-		});
-		if (!card.metadataReady) {
-			statusCell.createDiv({
-				cls: 'anki-card-manager-metadata-warning',
-				text: 'YAML missing or invalid',
-			});
-		}
-
-		const actions = row.createEl('td', {
-			cls: 'anki-card-manager-row-actions',
-			attr: { 'data-label': 'Actions' },
-		});
-		this.actionButton(actions, 'pencil', 'Edit card', () => {
-			new EditCardModal(this.app, card, () => this.refresh()).open();
-		});
-		this.actionButton(
-			actions,
-			card.registered ? 'circle-pause' : 'circle-play',
-			card.registered ? 'Unregister card' : 'Register card',
-			() => void this.toggleRegistration(card),
-		);
-		this.actionButton(actions, 'trash-2', 'Delete card', () => {
-			new DeleteCardModal(this.app, card, () => this.refresh()).open();
-		}, true);
 	}
 
-	private cell(row: HTMLTableRowElement, label: string, text: string): void {
-		row.createEl('td', { text, attr: { 'data-label': label } });
-	}
-
-	private actionButton(
-		container: HTMLElement,
-		icon: string,
-		label: string,
-		onClick: () => void,
-		warning = false,
-	): void {
-		const button = container.createEl('button', {
-			cls: ['clickable-icon', warning ? 'is-warning' : ''],
-			attr: { 'aria-label': label },
-		});
-		setIcon(button, icon);
-		button.addEventListener('click', onClick);
+	private openBulk(kind: BulkAction['kind']): void {
+		const selected = this.cards.filter((card) => this.selected.has(card.key));
+		if (!selected.length) return;
+		new BulkActionModal(this.app, selected, this.cards, kind, async () => { this.selected.clear(); await this.refresh(); }).open();
 	}
 
 	private async toggleRegistration(card: AnkiCard): Promise<void> {
-		try {
-			await toggleCardRegistration(this.app, card);
-			await this.refresh();
-			new Notice(card.registered ? 'Card unregistered.' : 'Card registered.');
-		} catch (error) {
-			console.error('Anki Card Manager: registration toggle failed', error);
-			new Notice(error instanceof Error ? error.message : 'Could not update the card.');
-		}
+		try { await toggleCardRegistration(this.app, card); await this.refresh(); }
+		catch (error) { new Notice(error instanceof Error ? error.message : 'Could not update the card.'); }
 	}
 
 	private async openSource(card: AnkiCard): Promise<void> {
-		const abstractFile = this.app.vault.getAbstractFileByPath(card.sourcePath);
-		if (!(abstractFile instanceof TFile)) {
-			new Notice('Source file no longer exists.');
-			return;
-		}
+		const file = this.app.vault.getAbstractFileByPath(card.sourcePath);
+		if (!(file instanceof TFile)) { new Notice('Source file no longer exists.'); return; }
 		const leaf = this.app.workspace.getLeaf('tab');
-		await leaf.openFile(abstractFile);
-		const view = leaf.view;
-		if (view instanceof MarkdownView) {
-			view.editor.setCursor({ line: card.startLine, ch: 0 });
-			view.editor.scrollIntoView(
-				{
-					from: { line: card.startLine, ch: 0 },
-					to: { line: card.endLine, ch: 0 },
-				},
-				true,
-			);
+		await leaf.openFile(file);
+		if (leaf.view instanceof MarkdownView) {
+			leaf.view.editor.setCursor({ line: card.startLine, ch: 0 });
+			leaf.view.editor.scrollIntoView({ from: { line: card.startLine, ch: 0 }, to: { line: card.endLine, ch: 0 } }, true);
 		}
 	}
 }

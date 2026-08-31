@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.1.2**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.1.3**.
 
 ## Features
 
@@ -20,7 +20,9 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Scans all Markdown files on demand and shows registered and unregistered cards in one searchable table.
 - Edits or deletes the exact source block and opens the source note at the card location.
 - Toggles registration without contacting Anki. Unregistering removes standalone `<!--ID: ... -->` lines and changes the markers to `<ANKI_START>` / `<ANKI_END>`; registering changes the markers back.
-- Groups table rows by hierarchical tags such as `study/software/sdlc`.
+- Separates Type and Deck columns; groups decks by `::` hierarchy, with optional flat tag groups inside each deck.
+- Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches such as `tags:Inbox`.
+- Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 
 ## Card format
 
@@ -71,9 +73,38 @@ The viewer also accepts the supplied single-colon form `{{c1:answer}}`; it never
 1. Type `<START_ANKI>` on its own line. If no matching closer exists before the next start, the rest of the card template and missing YAML properties are added immediately.
 2. Fill in the question and answer, then move the editor selection outside the marker block or focus another pane to see the collapsible card. Use **Edit source** to return to the raw text.
 3. Select the library ribbon icon or run **Anki Card Manager: Open card manager** to scan the vault.
-4. Search, filter, group by tags, open the source, edit, toggle registration, or delete a card from the table.
+4. Search, filter, group by deck and/or tag, open the source, edit, toggle registration, or select cards for bulk maintenance.
 
 Source edits are direct vault writes. Keep normal backups or source control, especially before bulk maintenance. If a note changes after the manager scans it, the operation stops instead of writing to a stale range; rescan and retry.
+
+### Decks, tags, and manager controls
+
+`anki_deck` is a single string shared by every card in a note. `Mother::Child` puts those cards in Child beneath Mother; a card belongs to one deck, not several ancestor decks. `anki_tags` is a list of independent strings, and each card inherits every tag in that note. Slashes or `::` in tags are kept as literal label text, not interpreted as deck levels.
+
+The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
+
+The **Reset** icon clears the query, status filter, grouping, group expansion state, and selection. The adjacent **Sync** icon rescans current Vault Markdown, preserving the controls. It does not invoke Anki synchronization.
+
+### Search syntax
+
+Search is case-insensitive and ignores whitespace differences within values. Field searches use substring matching (except `status`, which matches `registered` or `unregistered` exactly). Multiple fields are combined with AND:
+
+```text
+tags:Inbox
+TAGS : in box
+deck:Mother::Child type:Cloze
+tags:"Study notes" path:software
+```
+
+Supported fields: `deck` / `anki_deck`, `tags` / `tag` / `anki_tags`, `type`, `front` / `question`, `back` / `answer`, `path` / `source`, `status`, and `id`. A property value extends until the next property; quotes protect text that looks like a property. Free words before the first property are AND-matched across question, answer, type, deck, tags, path, and ID. Empty input shows all cards permitted by the status filter.
+
+### Bulk changes and file-level YAML
+
+Select rows or groups, then choose **Register**, **Unregister**, **Change tags**, **Change deck**, or **Delete**. All operations require confirmation. Registration and deletion affect only the selected unique blocks; unregistering removes their standalone IDs, and deleting also removes an exclusive code fence. These operations never delete notes from Anki itself.
+
+**Deck and tag changes apply to every card in each selected source file, including unselected cards**, because YAML belongs to the file. The dialog lists the affected files and explicitly shows both total and unselected card counts. No cards are moved or given per-card overrides. Deck input accepts one deck; tags support add, remove, or replace using one tag per line (empty replacement clears the list). Duplicate tag values are removed; matching for tag removal is exact and case-sensitive. Other YAML properties and the Markdown body are preserved, though YAML formatting/comments may be normalized.
+
+Bulk writes flush open note editors, validate all targets before any write, and update each file once. Changed card inventories or metadata abort stale actions. Each write rechecks the source atomically. Vault writes are not a cross-file transaction: a write failure stops remaining files and reports completed file paths, without rolling back over newer user edits. Backups or Obsidian File Recovery can be used to restore prior content. Invalid/unreadable YAML files are skipped with a count in the manager header.
 
 ## Commands and hotkeys
 
@@ -120,7 +151,9 @@ The production release files are generated at the repository root.
 
 `npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
 
-For browser layout checks, run `npm run test:browser` and open the printed localhost URL. The fixture uses sample text only and never reads or writes Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
+Manager tests also cover deck/tag semantics, field search, focus/caret/IME preservation, group selection and reset, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting.
+
+For browser layout checks, run `npm run test:browser` and open the printed editor or `/manager` URL. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
 
 ## License
 

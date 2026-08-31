@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3
+
+- Group cards by the file's single `anki_deck` using `::` hierarchy; keep multi-value tags flat and optionally group them within each deck.
+- Separate Type and Deck columns, preserve search focus/caret/IME during result updates, and add case/whitespace-tolerant property search with inline hints.
+- Add Reset and Vault-sync controls, unique row/table/group selection with mixed states, and selection pruning for filtered-out cards.
+- Add confirmed bulk registration, unregistration, deletion, and file-level deck/tag changes (add/remove/replace tags), with explicit disclosure of affected unselected cards.
+- Preserve Markdown bodies and unrelated YAML properties, preflight bulk targets, compare source snapshots before each write, and report partial completion without overwriting concurrent edits.
+- Add manager model/DOM/bulk-write regression tests, a sample-only browser fixture, and bilingual manager usage/safety documentation. Retain Obsidian 1.5.0 compatibility.
+
 ## 0.1.2
 
 - Add opt-in single-line question titles with ellipsis; full titles remain the default.
