@@ -3,6 +3,7 @@ import type { App } from 'obsidian';
 import { deleteCard, updateCard } from '../cardActions';
 import { cardPreview } from '../parser';
 import type { AnkiCard, CardEdit } from '../types';
+import { CARD_TYPES } from '../cardTypes';
 
 export class EditCardModal extends Modal {
 	private edit: CardEdit;
@@ -14,7 +15,7 @@ export class EditCardModal extends Modal {
 	) {
 		super(app);
 		this.edit = {
-			cardType: card.cardType,
+			cardType: CARD_TYPES.some((type) => type.name === card.cardType) ? card.cardType : 'Obsidian-Basic',
 			front: card.front,
 			back: card.back,
 		};
@@ -25,12 +26,13 @@ export class EditCardModal extends Modal {
 		this.modalEl.addClass('anki-card-manager-modal');
 		new Setting(this.contentEl)
 			.setName('Card type')
-			.setDesc('The single line immediately after the start marker.')
-			.addText((text) =>
-				text.setValue(this.edit.cardType).onChange((value) => {
+			.setDesc('Converting a cloze card to a basic card unwraps blanks when saved, using the same conversion as individual cards.')
+			.addDropdown((dropdown) => {
+				for (const type of CARD_TYPES) dropdown.addOption(type.name, type.name);
+				dropdown.setValue(this.edit.cardType).onChange((value) => {
 					this.edit.cardType = value;
-				}),
-			);
+				});
+			});
 
 		this.createTextarea('Question', this.edit.front, (value) => {
 			this.edit.front = value;
@@ -66,6 +68,7 @@ export class EditCardModal extends Modal {
 		field.createEl('label', { text: label });
 		const textarea = field.createEl('textarea', {
 			cls: 'anki-card-manager-modal-textarea',
+			attr: { 'aria-label': label },
 		});
 		textarea.value = value;
 		textarea.addEventListener('input', () => onChange(textarea.value));

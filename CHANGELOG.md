@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.5
+
+- Use the supplied Carbon filter-reset and Ant Design file-sync SVG geometry. Separate Search/Filter, Grouping and Change state controls with blue grouping and pale-purple state actions.
+- Add a filter for discovered card types, size status/type dropdowns to their current labels, let search fill the remaining width, and keep only the header's filtered/total count.
+- Remove the Actions column; open editing by selecting a question. Offer a Basic/Cloze dropdown with the shared card conversion logic and preserve cancel-without-write behavior.
+- Prefix group names with Deck/Tag and add collapse-all/expand-all controls that include descendants.
+- Add opt-in Count/Rate sampling (default Rate 30%) with fixed seed 42, group count/share allocations, exact integer quota rounding, duplicate-safe allocation and shortage redistribution.
+- Reject invalid sample budgets or insufficient unallocated candidates without changing selection or writing files. Reset all sampling controls and clear obsolete group allocations.
+- Add deterministic sampling and manager DOM regressions, verify light/dark browser behavior, and document grouping, selection-only sampling and recovery rules in both languages.
+
 ## 0.1.4
 
 - Limit single-line ellipsis to collapsed cards and show full questions when expanded. Halve all-edge shadows, add side gutters, and remove pencil-button shadows.

@@ -139,8 +139,8 @@ test('bulk writes each source once and reports partial failure without clobberin
 	assert.ok(sources.get('b.md')!.endsWith('Concurrent edit'));
 });
 
-async function openView() {
-	const fixtureApp = appFor();
+async function openView(sources = fixture()) {
+	const fixtureApp = appFor(sources);
 	const container = dom.window.document.body.createDiv();
 	const leaf = new harness.WorkspaceLeaf(fixtureApp.app, container) as unknown as WorkspaceLeaf;
 	const view = new harness.AnkiManagerView(leaf);
@@ -149,6 +149,108 @@ async function openView() {
 }
 const inputEvent = () => new dom.window.Event('input', { bubbles: true });
 const button = (container: HTMLElement, text: string) => [...container.querySelectorAll('button')].find((element) => element.textContent === text)!;
+const changeEvent = () => new dom.window.Event('change', { bubbles: true });
+
+test('manager has supplied icons, labeled controls, eight columns and dynamic type filtering without search focus loss', async () => {
+	const cloze = basic('Cloze card').replace('Obsidian-Basic', 'Cloze').replace('Back:', 'Text:');
+	const { container, view, close } = await openView(new Map([['a.md', note + cloze]]));
+	try {
+		assert.deepEqual([...container.querySelectorAll('thead th')].map((th) => th.textContent), ['', 'Question', 'Answer', 'Type', 'Deck', 'Tags', 'Source', 'Status']);
+		assert.equal(container.querySelector('.anki-card-manager-results-count'), null);
+		assert.ok(container.textContent?.includes('Search/Filter'));
+		assert.ok(container.textContent?.includes('Grouping'));
+		assert.ok(container.textContent?.includes('Change state | 0 selected'));
+		assert.equal(container.querySelector('[data-icon="carbon--filter-reset"] svg')?.getAttribute('viewBox'), '0 0 32 32');
+		assert.equal(container.querySelector('[data-icon="ant-design--file-sync-outlined"] svg')?.getAttribute('viewBox'), '0 0 1024 1024');
+		const type = container.querySelector<HTMLSelectElement>('[aria-label="Filter card type"]')!;
+		assert.deepEqual([...type.options].map((option) => option.textContent), ['All card types', 'Cloze', 'Obsidian-Basic']);
+		type.value = 'Cloze'; type.dispatchEvent(changeEvent());
+		assert.equal(container.querySelectorAll('tbody tr').length, 1);
+		const search = container.querySelector<HTMLInputElement>('input[type=search]')!;
+		search.focus(); search.value = 'type:Cloze'; search.dispatchEvent(inputEvent()); await view.refresh();
+		assert.equal(dom.window.document.activeElement, search); assert.equal(type.value, 'Cloze');
+		container.querySelector<HTMLButtonElement>('[data-icon="carbon--filter-reset"]')!.click();
+		assert.equal(type.value, ''); assert.equal(search.value, ''); assert.equal(container.querySelectorAll('tbody tr').length, 3);
+	} finally { await close(); }
+});
+
+test('group labels distinguish deck/tag and collapse-all tracks every descendant and individual toggle', async () => {
+	const { container, close } = await openView();
+	try {
+		button(container, 'Group by deck hierarchy').click(); button(container, 'Group by tag').click();
+		assert.ok(container.textContent?.includes('Deck: Mother (3)')); assert.ok(container.textContent?.includes('Tag: Inbox (2)'));
+		button(container, '전체 접기').click();
+		assert.equal(container.querySelectorAll('details[open]').length, 0);
+		button(container, '전체 펼치기').click();
+		assert.equal(container.querySelectorAll('details[open]').length, container.querySelectorAll('details').length);
+		button(container, '전체 접기').click();
+		const first = container.querySelector('details')!; first.open = true; first.dispatchEvent(new dom.window.Event('toggle'));
+		assert.ok(button(container, '전체 접기'));
+	} finally { await close(); }
+});
+
+test('question opens type dropdown editor; Basic conversion uses the shared cloze conversion and cancel writes nothing', async () => {
+	const source = yaml + '<START_ANKI>\nCloze\nCloze question\nText:\n{{c1::**answer**}} {{c2:tail}}\n<!--ID: 123-->\n<END_ANKI>\n';
+	const { container, sources, writes, close } = await openView(new Map([['a.md', source]]));
+	try {
+		container.querySelector<HTMLButtonElement>('[aria-label="Edit card: Cloze question"]')!.click();
+		let modal = dom.window.document.querySelector<HTMLElement>('.modal')!;
+		let type = modal.querySelector<HTMLSelectElement>('[aria-label="Card type"]')!;
+		assert.deepEqual([...type.options].map((option) => option.value), ['Obsidian-Basic', 'Cloze']);
+		type.value = 'Obsidian-Basic'; type.dispatchEvent(changeEvent()); button(modal, 'Cancel').click();
+		assert.equal(writes.length, 0); assert.equal(sources.get('a.md'), source);
+		container.querySelector<HTMLButtonElement>('[aria-label="Edit card: Cloze question"]')!.click();
+		modal = dom.window.document.querySelector<HTMLElement>('.modal')!;
+		type = modal.querySelector<HTMLSelectElement>('[aria-label="Card type"]')!;
+		type.value = 'Obsidian-Basic'; type.dispatchEvent(changeEvent()); button(modal, 'Save changes').click();
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		assert.equal(writes.length, 1); assert.match(sources.get('a.md')!, /Obsidian-Basic\nCloze question\nBack:\n\*\*answer\*\* tail\n<!--ID: 123-->/);
+		assert.equal(dom.window.document.querySelector('.modal'), null);
+	} finally { await close(); }
+});
+
+test('sampling defaults disabled Rate 30, executes only on selection, preserves it on errors and resets completely', async () => {
+	const { container, writes, close } = await openView();
+	try {
+		const enable = container.querySelector<HTMLInputElement>('[aria-label="Enable sampling"]')!;
+		const mode = container.querySelector<HTMLSelectElement>('[aria-label="Sampling mode"]')!;
+		const amount = container.querySelector<HTMLInputElement>('[aria-label="Sampling amount"]')!;
+		assert.equal(enable.checked, false); assert.equal(mode.value, 'rate'); assert.equal(amount.value, '30'); assert.equal(button(container, 'Execute').disabled, true);
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click(); enable.click();
+		assert.equal(button(container, 'Execute').disabled, false);
+		mode.value = 'count'; mode.dispatchEvent(changeEvent()); amount.value = '4'; button(container, 'Execute').click();
+		assert.ok(container.textContent?.includes('Change state | 3 selected'));
+		assert.match(container.querySelector('[role="alert"]')!.textContent, /Count must/);
+		amount.value = '2'; button(container, 'Execute').click();
+		assert.ok(container.textContent?.includes('Change state | 2 selected')); assert.equal(writes.length, 0);
+		container.querySelector<HTMLButtonElement>('[data-icon="carbon--filter-reset"]')!.click();
+		assert.equal(enable.checked, false); assert.equal(mode.value, 'rate'); assert.equal(amount.value, '30'); assert.ok(container.textContent?.includes('0 selected'));
+	} finally { await close(); }
+});
+
+test('group sampling allocates selected unique cards, preserves input focus and rejects insufficient remainder without writes', async () => {
+	const sample = new Map([['a.md', yaml.replace('[Inbox, Study/UML]', '[A]') + Array.from({ length: 8 }, (_, index) => basic(`A${index}`)).join('')],
+		['b.md', yaml.replace('[Inbox, Study/UML]', '[B]') + Array.from({ length: 8 }, (_, index) => basic(`B${index}`)).join('')]]);
+	const { container, writes, close } = await openView(sample);
+	try {
+		button(container, 'Group by tag').click();
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click();
+		const input = container.querySelector<HTMLInputElement>('[aria-label="Sampling for tag group: A"]')!;
+		assert.equal(input.disabled, true);
+		container.querySelector<HTMLInputElement>('[aria-label="Enable sampling"]')!.click();
+		const mode = container.querySelector<HTMLSelectElement>('[aria-label="Sampling mode"]')!; mode.value = 'count'; mode.dispatchEvent(changeEvent());
+		container.querySelector<HTMLInputElement>('[aria-label="Sampling amount"]')!.value = '10';
+		input.focus(); input.value = '6'; input.dispatchEvent(inputEvent());
+		assert.equal(dom.window.document.activeElement, input);
+		button(container, 'Execute').click();
+		const checked = [...container.querySelectorAll<HTMLInputElement>('tbody input:checked')];
+		assert.equal(checked.length, 10); assert.equal(checked.filter((box) => box.getAttribute('aria-label')?.startsWith('Select card: A')).length, 6);
+		input.value = '1'; input.dispatchEvent(inputEvent()); button(container, 'Execute').click();
+		assert.match(container.querySelector('[role="alert"]')!.textContent, /Not enough unique cards/);
+		assert.equal(container.querySelectorAll('tbody input:checked').length, 10); assert.equal(writes.length, 0);
+		mode.value = 'rate'; mode.dispatchEvent(changeEvent()); assert.equal(input.value, '');
+	} finally { await close(); }
+});
 
 test('typing and scan refresh preserve the search DOM, focus, caret and IME composition', async () => {
 	const { view, container, close } = await openView();
@@ -172,7 +274,7 @@ test('typing and scan refresh preserve the search DOM, focus, caret and IME comp
 
 test('deck + tag groups support unique selection, mixed state, duplicates and reset', async () => {
 	const { container, close } = await openView();
-	assert.equal(container.querySelectorAll('thead th').length, 9);
+	assert.equal(container.querySelectorAll('thead th').length, 8);
 	button(container, 'Group by deck hierarchy').click();
 	button(container, 'Group by tag').click();
 	const parent = container.querySelector<HTMLInputElement>('input[aria-label="Select deck group: Mother"]')!;
@@ -191,7 +293,7 @@ test('deck + tag groups support unique selection, mixed state, duplicates and re
 	assert.equal(container.querySelectorAll('details').length, 0);
 	assert.ok(container.textContent?.includes('0 selected'));
 	assert.equal(button(container, 'Group by tag').getAttribute('aria-pressed'), 'false');
-	assert.equal(container.querySelector('[aria-label^="Sync manager"]')?.getAttribute('data-icon'), 'arrow-right-left');
+	assert.equal(container.querySelector('[aria-label^="Sync manager"]')?.getAttribute('data-icon'), 'ant-design--file-sync-outlined');
 	await close();
 });
 

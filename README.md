@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.1.4**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.1.5**.
 
 ## Features
 
@@ -25,6 +25,8 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches such as `tags:Inbox`.
 - Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
+- Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
+- Samples the selected unique cards by Count or Rate with fixed seed 42, optional per-group allocations, and validation that leaves selection unchanged on failure.
 
 ## Card format
 
@@ -81,7 +83,7 @@ Select **Registered** or **Unregistered** beside the type to toggle registration
 1. Type `<START_ANKI>` (or your configured registered start trigger) on its own line. If no matching closer exists before the next start, the rest of the card template and missing YAML properties are added immediately.
 2. Fill in the question and answer, then move the editor selection outside the marker block or focus another pane to see the collapsible card. Use **Edit source** to return to the raw text.
 3. Select the library ribbon icon or run **Anki Card Manager: Open card manager** to scan the vault.
-4. Search, filter, group by deck and/or tag, open the source, edit, toggle registration, or select cards for bulk maintenance.
+4. Search or filter by status/type, group by deck and/or tag, select a question to edit, or open its source. Select cards for sampling or bulk maintenance.
 
 Source edits are direct vault writes. Keep normal backups or source control, especially before bulk maintenance. If a note changes after the manager scans it, the operation stops instead of writing to a stale range; rescan and retry.
 
@@ -89,9 +91,15 @@ Source edits are direct vault writes. Keep normal backups or source control, esp
 
 `anki_deck` is a single string shared by every card in a note. `Mother::Child` puts those cards in Child beneath Mother; a card belongs to one deck, not several ancestor decks. `anki_tags` is a list of independent strings, and each card inherits every tag in that note. Slashes or `::` in tags are kept as literal label text, not interpreted as deck levels.
 
-The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
+The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
 
-The **Reset** icon clears the query, status filter, grouping, group expansion state, and selection. The adjacent **Sync** icon rescans current Vault Markdown, preserving the controls. It does not invoke Anki synchronization.
+Next to **Select all matching cards**, **전체 접기** (Collapse all) appears whenever any group is open, including descendants. Otherwise **전체 펼치기** (Expand all) opens every group.
+
+**Search/Filter** contains the search box and compact **All statuses / All card types** dropdowns, sized to the selected text so the search box takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. The header alone shows the filtered/total card count.
+
+Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
+
+The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) rescans current Vault Markdown, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization.
 
 ### Search syntax
 
@@ -113,6 +121,19 @@ Select rows or groups, then choose **Register**, **Unregister**, **Change tags**
 **Deck and tag changes apply to every card in each selected source file, including unselected cards**, because YAML belongs to the file. The dialog lists the affected files and explicitly shows both total and unselected card counts. No cards are moved or given per-card overrides. Deck input accepts one deck; tags support add, remove, or replace using one tag per line (empty replacement clears the list). Duplicate tag values are removed; matching for tag removal is exact and case-sensitive. Other YAML properties and the Markdown body are preserved, though YAML formatting/comments may be normalized.
 
 Bulk writes flush open note editors, validate all targets before any write, and update each file once. Changed card inventories or metadata abort stale actions. Each write rechecks the source atomically. Vault writes are not a cross-file transaction: a write failure stops remaining files and reports completed file paths, without rolling back over newer user edits. Backups or Obsidian File Recovery can be used to restore prior content. Invalid/unreadable YAML files are skipped with a count in the manager header.
+
+### Sampling selected cards
+
+Below Change state, enable **Sampling**, choose **Count** or **Rate**, enter an amount, then select **Execute**. Sampling is off by default, with Rate **30%**. Execute keeps only the sampled cards selected and deselects the rest; it never changes card text, registration or files. Each run uses seed **42** with stable card ordering. The same candidate selection and settings produce the same result, regardless of duplicate tag rows or scan order.
+
+- Count must be an integer from 1 to the number of selected unique cards.
+- Rate must be greater than 0 and at most 100; the total sample size is rounded up (`ceil(selected × rate / 100)`).
+- With grouping enabled, **Sampling:** inputs beside group labels allocate part of the global sample from selected cards in that group, including descendants. Empty means unallocated; explicit zero reserves no slots and excludes that group's cards from the remainder pool. Count allocations must be non-negative integers with a sum no greater than the total count. Rate allocations are shares of the final sample (0–100%), with a sum no greater than 100%.
+- Example: Count 10 with group A set to 6 draws 6 from A and 4 from outside A. From 100 selected cards, Rate 30 with A set to 50% draws 15 from A and 15 from outside A. Integer rate quotas use largest-remainder rounding, including the unallocated share, so they sum to the exact target.
+- Undersized groups contribute every available selected card; missing slots go to the remainder pool. Cards cannot fill two slots, even across overlapping tags or parent/child groups. Smaller selected candidate pools are handled first, with stable group-key tie-breaking. Counts shown in overlapping groups can therefore include cards assigned through another group.
+- The remainder is drawn from selected unique cards **outside all explicitly allocated groups**. After drawing, if there are too few candidates to reach the target, an error is shown and the original selection is left intact. Reduce the sample or adjust/clear group values; cards left inside an allocated group are not silently used as the remainder.
+
+Changing Count/Rate or grouping clears group allocations. Group inputs disappear when filtered out, and their allocations are discarded. Reset restores sampling to disabled Rate 30%. Sampling configuration is local to the current manager view and is not persisted in plugin settings.
 
 ## Commands and hotkeys
 
@@ -170,7 +191,7 @@ The production release files are generated at the repository root.
 
 `npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
 
-Manager tests also cover deck/tag semantics, field search, focus/caret/IME preservation, group selection and reset, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting.
+Manager tests also cover deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover reproducibility, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
 
 Additional regressions cover type menus and live-editor registration, Cloze unwrapping, custom triggers across all consumers, draft settings, simultaneous literal replacement, durable backups, write/settings failures, concurrent-edit protection, and recovery after restart. Card types, separators and icon assignments are centralized in `src/cardTypes.ts` for future extension.
 

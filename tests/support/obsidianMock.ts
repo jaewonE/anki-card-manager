@@ -77,7 +77,6 @@ export class Modal {
 	onOpen(): void {}
 	onClose(): void {}
 }
-export class ButtonComponent {}
 class Control {
 	constructor(readonly element: HTMLInputElement | HTMLSelectElement | HTMLButtonElement) {}
 	setValue(value: string | boolean): this {
@@ -91,8 +90,12 @@ class Control {
 		this.element.addEventListener(this.element.tagName === 'SELECT' ? 'change' : 'input', () => callback(this.element.value)); return this;
 	}
 	setButtonText(text: string): this { this.element.textContent = text; return this; }
-	setCta(): this { return this; }
+	setCta(): this { this.element.classList.add('mod-cta'); return this; }
 	onClick(callback: () => void): this { this.element.addEventListener('click', callback); return this; }
+}
+export class ButtonComponent extends Control {
+	constructor(container: HTMLElement) { super(container.createEl('button')); }
+	setWarning(): this { this.element.classList.add('mod-warning'); return this; }
 }
 export class Setting {
 	private row: HTMLElement;
