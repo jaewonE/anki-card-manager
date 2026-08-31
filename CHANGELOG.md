@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Keep Registered buttons blue and Unregistered buttons red to match card icons, including hover/focus and brighter dark-mode colors.
+- Share Question and Source link padding, bright backgrounds and small corner radii in the manager.
+- Place the select-all checkbox before its label and keep collapse/expand-all immediately beside it in a left-aligned toolbar.
+- Add selection-toolbar regression coverage and host-theme color checks in the browser fixtures; update English/Korean documentation.
+
 ## 0.2.0
 
 - Keep raw Markdown visible in Obsidian Source mode and render interactive cards in Reading view with section-aware deduplication and managed component cleanup.

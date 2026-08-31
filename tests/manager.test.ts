@@ -371,6 +371,29 @@ test('group labels distinguish deck/tag and collapse-all tracks every descendant
 	} finally { await close(); }
 });
 
+test('selection toolbar puts checkbox before its label and collapse control directly after it', async () => {
+	const { container, close } = await openView();
+	try {
+		const assertToolbar = (grouped: boolean): void => {
+			const toolbar = container.querySelector<HTMLElement>('.anki-card-manager-results-toolbar')!;
+			const label = toolbar.querySelector<HTMLLabelElement>('.anki-card-manager-select-all')!;
+			assert.equal(label.firstChild, label.querySelector('input'));
+			assert.equal(label.children[1]!.textContent, 'Select all matching cards');
+			assert.equal(toolbar.firstElementChild, label);
+			assert.equal(toolbar.children.length, grouped ? 2 : 1);
+			if (grouped) assert.equal(label.nextElementSibling?.textContent, '전체 접기');
+		};
+		assertToolbar(false);
+		button(container, 'Group by tag').click(); assertToolbar(true);
+		container.querySelector<HTMLElement>('.anki-card-manager-select-all span')!.click();
+		assert.ok(container.textContent?.includes('Change state | 3 selected'));
+		button(container, '전체 접기').click();
+		assert.equal(container.querySelector('.anki-card-manager-select-all')!.nextElementSibling?.textContent, '전체 펼치기');
+		assert.equal(container.querySelectorAll('details[open]').length, 0);
+		assert.ok(container.textContent?.includes('Change state | 3 selected'));
+	} finally { await close(); }
+});
+
 test('question opens type dropdown editor; Basic conversion uses the shared cloze conversion and cancel writes nothing', async () => {
 	const source = yaml + '<START_ANKI>\nCloze\nCloze question\nText:\n{{c1::**answer**}} {{c2:tail}}\n<!--ID: 123-->\n<END_ANKI>\n';
 	const { container, sources, writes, close } = await openView(new Map([['a.md', source]]));

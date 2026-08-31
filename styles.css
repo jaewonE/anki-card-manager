@@ -230,14 +230,15 @@
 	box-shadow: none;
 }
 
-.anki-card-manager-registration-toggle {
-	color: var(--anki-card-manager-registered);
-	background: color-mix(in srgb, var(--anki-card-manager-registered) 12%, var(--background-primary));
+/* Keep registration colors above generic theme pressed/hover button rules. */
+.anki-card-manager-card .anki-card-manager-registration-toggle[aria-pressed],
+.anki-card-manager-card .anki-card-manager-registration-toggle[aria-pressed]:is(:hover, :focus-visible, :active) {
+	color: var(--anki-registration-color, var(--anki-card-manager-registered));
+	background: color-mix(in srgb, var(--anki-registration-color, var(--anki-card-manager-registered)) 12%, var(--background-primary));
 }
 
-.is-unregistered .anki-card-manager-registration-toggle {
-	color: var(--anki-card-manager-unregistered);
-	background: color-mix(in srgb, var(--anki-card-manager-unregistered) 12%, var(--background-primary));
+.anki-card-manager-card .anki-card-manager-registration-toggle[aria-pressed="false"] {
+	--anki-registration-color: var(--anki-card-manager-unregistered);
 }
 
 .anki-card-manager-type-selector:focus-visible,
@@ -381,7 +382,7 @@
 .anki-card-manager-bulk-actions.has-selection .anki-card-manager-bulk-buttons button:not(:disabled):hover {
 	background: color-mix(in srgb, #b391ef 48%, var(--background-primary));
 }
-.anki-card-manager-results-toolbar { justify-content: space-between; flex-wrap: wrap; }
+.anki-card-manager-results-toolbar { justify-content: flex-start; flex-wrap: wrap; }
 .anki-card-manager-sampling {
 	margin: var(--size-4-3) 0;
 	padding: var(--size-4-3);
@@ -410,6 +411,8 @@
 	vertical-align: middle;
 	margin-right: var(--size-4-2);
 }
+
+.anki-card-manager-view .anki-card-manager-select-all input[type="checkbox"] { margin: 0; }
 
 .anki-card-manager-results { min-width: 0; }
 
@@ -466,18 +469,13 @@
 
 .anki-card-manager-source-link,
 .anki-card-manager-question-link {
-	background: transparent;
 	box-shadow: none;
-	color: var(--text-accent);
 	font: inherit;
 	height: auto;
 	max-width: 220px;
 	overflow-wrap: anywhere;
-	padding: 0;
 	text-align: left;
 	white-space: normal;
-}
-.anki-card-manager-question-link {
 	color: var(--text-normal);
 	border: 0;
 	font-weight: var(--font-medium);
@@ -485,6 +483,7 @@
 	background: color-mix(in srgb, var(--background-secondary) 25%, var(--background-primary));
 	border-radius: 3px;
 }
+.anki-card-manager-source-link:hover,
 .anki-card-manager-question-link:hover { text-decoration: underline; color: var(--text-accent); }
 
 .anki-card-manager-search-mode { min-width: 48px; font-weight: var(--font-semibold); box-shadow: none; }

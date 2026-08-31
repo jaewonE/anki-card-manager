@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.0**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.1**.
 
 ## Features
 
@@ -76,7 +76,7 @@ The viewer also accepts the supplied single-colon form `{{c1:answer}}`; viewing 
 
 Expand a card and select its type label with the downward triangle. A native Obsidian floating menu offers **Obsidian-Basic** and **Cloze**, including keyboard selection. Converting Cloze to Basic changes `Text:` to `Back:` and unwraps single/double-colon cloze tokens in the question and answer, retaining the answer text and Markdown while removing hints. Converting Basic to Cloze changes the type and separator to `Text:` without adding blanks. IDs and registration state are preserved during type changes.
 
-Select **Registered** or **Unregistered** beside the type to toggle registration. Its color matches the card icon. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. In Live Preview the card stays open and updates use ordinary editor undo/save. Reading-view controls update the source file and refresh the preview. This status describes Markdown markers, not whether a note currently exists in Anki.
+Select **Registered** or **Unregistered** beside the type to toggle registration. The button matches the card icon: blue for registered, red for unregistered, with brighter colors in dark mode. These colors also apply on hover and keyboard focus. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. In Live Preview the card stays open and updates use ordinary editor undo/save. Reading-view controls update the source file and refresh the preview. This status describes Markdown markers, not whether a note currently exists in Anki.
 
 ## Usage
 
@@ -93,11 +93,11 @@ Source edits are direct vault writes. Keep normal backups or source control, esp
 
 The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
 
-Next to **Select all matching cards**, **전체 접기** (Collapse all) appears whenever any group is open, including descendants. Otherwise **전체 펼치기** (Expand all) opens every group.
+The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar. **전체 접기** (Collapse all) appears whenever any group is open, including descendants. Otherwise **전체 펼치기** (Expand all) opens every group.
 
 **Search/Filter** contains the search box, its immediately adjacent **AND/OR** button, and compact **All statuses / All card types** dropdowns. AND is blue and OR is orange, with brighter dark-mode colors. Dropdowns fit the selected text so search takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons and a pale blue panel. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. **Sampling** uses a pale green panel and the same label size. The header alone shows the filtered/total count.
 
-Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
+Question and Source links share a lightly padded, bright background with subtly rounded corners. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
 The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) rescans current Vault Markdown, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization.
 
