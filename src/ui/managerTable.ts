@@ -7,9 +7,14 @@ export interface TableActions {
 	edit: (card: AnkiCard) => void;
 }
 
+let nextTableLabel = 0;
+
 export function renderTable(container: HTMLElement, cards: AnkiCard[], actions: TableActions): void {
+	const labelId = `anki-card-manager-table-label-${++nextTableLabel}`;
 	const wrapper = container.createDiv({ cls: 'anki-card-manager-table-wrapper',
-		attr: { role: 'region', 'aria-label': 'Anki cards table', tabindex: '0' } });
+		attr: { role: 'region', 'aria-labelledby': labelId, tabindex: '0' } });
+	// Obsidian treats aria-label as a tooltip. A referenced label keeps the accessible name without one.
+	wrapper.createSpan({ text: 'Anki cards table', attr: { id: labelId, hidden: '' } });
 	const table = wrapper.createEl('table', { cls: 'anki-card-manager-table' });
 	const header = table.createEl('thead').createEl('tr');
 	actions.select(header.createEl('th'), cards, 'Select all cards in table');

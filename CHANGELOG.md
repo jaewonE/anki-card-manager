@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Remove the table-wide "Anki cards table" hover tooltip by using a referenced accessible label instead of Obsidian's tooltip-triggering aria-label attribute.
+- Preserve screen-reader names, keyboard focus and horizontal scrolling, with unique labels across grouped tables and multiple manager views.
+- Add tooltip-attribute and accessible-label regression coverage; update English/Korean documentation.
+
 ## 0.2.2
 
 - Add 12px left padding to the results toolbar while retaining the existing grouping-only collapse/expand controls.

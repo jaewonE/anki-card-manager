@@ -403,7 +403,8 @@ test('flat and nested tables retain all columns inside keyboard-accessible scrol
 			for (const table of tables) {
 				assert.equal(table.parentElement!.getAttribute('role'), 'region');
 				assert.equal(table.parentElement!.getAttribute('tabindex'), '0');
-				assert.equal(table.parentElement!.getAttribute('aria-label'), 'Anki cards table');
+				const labelId = table.parentElement!.getAttribute('aria-labelledby')!;
+				assert.equal(dom.window.document.getElementById(labelId)!.textContent, 'Anki cards table');
 				assert.equal(table.querySelectorAll('thead th').length, 8);
 				for (const row of table.querySelectorAll('tbody tr')) assert.equal(row.children.length, 8);
 			}
@@ -412,6 +413,31 @@ test('flat and nested tables retain all columns inside keyboard-accessible scrol
 		button(container, 'Group by deck hierarchy').click(); button(container, 'Group by tag').click();
 		assertTables();
 	} finally { await close(); }
+});
+
+test('table regions have unique accessible labels without Obsidian hover-tooltip attributes', async () => {
+	const first = await openView();
+	const second = await openView();
+	try {
+		button(first.container, 'Group by deck hierarchy').click(); button(first.container, 'Group by tag').click();
+		await first.view.refresh();
+		const labels = new Set<string>();
+		for (const container of [first.container, second.container]) {
+			for (const wrapper of container.querySelectorAll<HTMLElement>('.anki-card-manager-table-wrapper')) {
+				assert.equal(wrapper.hasAttribute('aria-label'), false);
+				assert.equal(wrapper.hasAttribute('title'), false);
+				assert.equal(wrapper.querySelector('table')!.closest('[aria-label], [title]'), null);
+				const id = wrapper.getAttribute('aria-labelledby')!;
+				assert.ok(id); assert.equal(labels.has(id), false); labels.add(id);
+				const label = dom.window.document.getElementById(id)!;
+				assert.equal(label.parentElement, wrapper);
+				assert.equal(label.textContent, 'Anki cards table');
+				assert.equal(label.hidden, true);
+				wrapper.focus(); assert.equal(dom.window.document.activeElement, wrapper);
+			}
+		}
+		assert.ok(labels.size > 2);
+	} finally { await first.close(); await second.close(); }
 });
 
 test('question opens type dropdown editor; Basic conversion uses the shared cloze conversion and cancel writes nothing', async () => {

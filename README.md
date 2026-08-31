@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.2**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.3**.
 
 ## Features
 
@@ -95,7 +95,7 @@ The default manager view is a flat table. **Group by deck hierarchy** and **Grou
 
 The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar, padded 12px on the left. Group controls appear only when grouping is enabled and there are matching cards: **전체 접기** (Collapse all) appears whenever any group is open, including descendants; otherwise **전체 펼치기** (Expand all) opens every group.
 
-Tables keep their columns and headers at every screen width, including inside nested groups. On narrow screens or panes, scroll each table horizontally instead of switching to a stacked key-value layout. The table's scroll region also accepts keyboard focus for horizontal arrow-key scrolling.
+Tables keep their columns and headers at every screen width, including inside nested groups. On narrow screens or panes, scroll each table horizontally instead of switching to a stacked key-value layout. The table's scroll region also accepts keyboard focus for horizontal arrow-key scrolling. Its screen-reader name does not appear as a table-wide hover tooltip.
 
 **Search/Filter** contains the search box, its immediately adjacent **AND/OR** button, and compact **All statuses / All card types** dropdowns. AND is blue and OR is orange, with brighter dark-mode colors. Dropdowns fit the selected text so search takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons and a pale blue panel. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. **Sampling** uses a pale green panel and the same label size. The header alone shows the filtered/total count.
 
