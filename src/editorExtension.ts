@@ -1,155 +1,201 @@
-import { RangeSetBuilder } from '@codemirror/state';
+import {
+	EditorState,
+	StateEffect,
+	StateField,
+} from '@codemirror/state';
+import type { Extension } from '@codemirror/state';
 import {
 	Decoration,
 	EditorView,
 	ViewPlugin,
-	WidgetType,
 } from '@codemirror/view';
-import type { DecorationSet, ViewUpdate } from '@codemirror/view';
-import { Component, editorInfoField } from 'obsidian';
+import type { DecorationSet } from '@codemirror/view';
+import { editorInfoField } from 'obsidian';
 import type { App } from 'obsidian';
-import { renderAnkiCard } from './cardRenderer';
+import { AnkiCardsWidget } from './editorWidgets';
 import { parseAnkiCards } from './parser';
+import { groupAdjacentCards } from './cardGrouping';
+import { protectCardDeletion } from './editorDeletion';
 import type { AnkiCard, CardPlacement } from './types';
 
-class AnkiCardWidget extends WidgetType {
-	private component?: Component;
-
-	constructor(
-		private readonly app: App,
-		private readonly card: AnkiCard,
-	) {
-		super();
-	}
-
-	eq(other: AnkiCardWidget): boolean {
-		return this.card.raw === other.card.raw && this.card.key === other.card.key;
-	}
-
-	toDOM(): HTMLElement {
-		const container = createDiv({ cls: 'anki-card-manager-editor-widget' });
-		this.component = new Component();
-		this.component.load();
-		renderAnkiCard(this.app, container, this.card, this.component);
-		return container;
-	}
-
-	destroy(): void {
-		this.component?.unload();
-		this.component = undefined;
-	}
+interface AnkiDecorationState {
+	decorations: DecorationSet;
+	editorFocused: boolean;
+	placement: CardPlacement;
+	truncateTitles: boolean;
 }
 
-class AnkiCardCollectionWidget extends WidgetType {
-	private component?: Component;
-
-	constructor(
-		private readonly app: App,
-		private readonly cards: AnkiCard[],
-	) {
-		super();
-	}
-
-	eq(other: AnkiCardCollectionWidget): boolean {
-		return (
-			this.cards.length === other.cards.length &&
-			this.cards.every((card, index) => card.raw === other.cards[index]?.raw)
-		);
-	}
-
-	toDOM(): HTMLElement {
-		const container = createDiv({
-			cls: ['anki-card-manager-editor-widget', 'is-document-end'],
-		});
-		container.createDiv({
-			cls: 'anki-card-manager-collection-heading',
-			text: `Anki cards (${this.cards.length})`,
-		});
-		this.component = new Component();
-		this.component.load();
-		for (const card of this.cards) {
-			renderAnkiCard(this.app, container, card, this.component, { compact: true });
-		}
-		return container;
-	}
-
-	destroy(): void {
-		this.component?.unload();
-		this.component = undefined;
-	}
-}
-
-function selectionTouchesCard(view: EditorView, card: AnkiCard): boolean {
-	return view.state.selection.ranges.some((range) =>
+function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
+	return state.selection.ranges.some((range) =>
 		range.empty
-			? range.from >= card.renderFrom && range.from < card.renderTo
+			? range.from >= card.renderFrom && (range.from < card.renderTo || range.from === state.doc.length && range.from === card.renderTo)
 			: range.from < card.renderTo && range.to > card.renderFrom,
 	);
 }
 
 function buildDecorations(
-	view: EditorView,
+	state: EditorState,
 	app: App,
 	placement: CardPlacement,
+	renderFocusedCard: boolean,
+	truncateTitles: boolean,
 ): DecorationSet {
-	const sourcePath = view.state.field(editorInfoField).file?.path ?? '';
-	const cards = parseAnkiCards(view.state.doc.toString(), sourcePath);
-	const builder = new RangeSetBuilder<Decoration>();
-	const focusedCards = new Set(
-		cards.filter((card) => selectionTouchesCard(view, card)).map((card) => card.key),
-	);
+	const sourcePath = state.field(editorInfoField, false)?.file?.path ?? '';
+	const cards = parseAnkiCards(state.doc.toString(), sourcePath);
+	const ranges = [];
 
-	for (const card of cards) {
-		if (focusedCards.has(card.key)) continue;
+	const visibleCards = cards.filter((card) => renderFocusedCard || !selectionTouchesCard(state, card));
+	const groups = placement === 'inline'
+		? groupAdjacentCards(state.doc.toString(), visibleCards) : visibleCards.map((card) => [card]);
+	for (const group of groups) {
+		const first = group[0];
+		const last = group[group.length - 1];
+		if (!first || !last) continue;
 		const decoration =
 			placement === 'inline'
 				? Decoration.replace({
-						widget: new AnkiCardWidget(app, card),
+						widget: new AnkiCardsWidget(app, group, false, truncateTitles),
 						block: true,
+						inclusive: false,
 					})
-				: Decoration.replace({});
-		builder.add(card.renderFrom, card.renderTo, decoration);
+				: Decoration.replace({ inclusive: false });
+		ranges.push(decoration.range(first.renderFrom, last.renderTo));
 	}
 
 	if (placement === 'document-end' && cards.length > 0) {
-		builder.add(
-			view.state.doc.length,
-			view.state.doc.length,
+		ranges.push(
 			Decoration.widget({
-				widget: new AnkiCardCollectionWidget(app, cards),
+				widget: new AnkiCardsWidget(app, cards, true, truncateTitles),
 				block: true,
 				side: 1,
-			}),
+			}).range(state.doc.length),
 		);
 	}
 
-	return builder.finish();
+	return Decoration.set(ranges, true);
+}
+
+function safeBuildDecorations(
+	state: EditorState,
+	app: App,
+	placement: CardPlacement,
+	renderFocusedCard: boolean,
+	truncateTitles: boolean,
+): DecorationSet {
+	try {
+		return buildDecorations(state, app, placement, renderFocusedCard, truncateTitles);
+	} catch (error) {
+		console.error('Anki Card Manager: card rendering was disabled for this editor', error);
+		return Decoration.none;
+	}
+}
+
+function eventTargetsWidget(target: EventTarget | null): boolean {
+	const element = target as Element | null;
+	return (
+		typeof element?.closest === 'function' &&
+		element.closest('.anki-card-manager-editor-widget') !== null
+	);
 }
 
 export function createAnkiCardEditorExtension(
 	app: App,
 	getPlacement: () => CardPlacement,
-) {
-	return ViewPlugin.fromClass(
-		class {
-			decorations: DecorationSet;
-
-			constructor(view: EditorView) {
-				this.decorations = buildDecorations(view, app, getPlacement());
-			}
-
-			update(update: ViewUpdate): void {
-				if (update.docChanged || update.selectionSet) {
-					this.decorations = buildDecorations(
-						update.view,
-						app,
-						getPlacement(),
-					);
-				}
-			}
+	getTruncateTitles: () => boolean = () => false,
+): Extension {
+	const focusEffect = StateEffect.define<boolean>();
+	const decorationField = StateField.define<AnkiDecorationState>({
+		create(state) {
+			const placement = getPlacement();
+			const truncateTitles = getTruncateTitles();
+			return {
+				decorations: safeBuildDecorations(state, app, placement, false, truncateTitles),
+				editorFocused: true,
+				placement,
+				truncateTitles,
+			};
 		},
-		{
-			decorations: (value) => value.decorations,
+		update(value, transaction) {
+			let editorFocused = value.editorFocused;
+			for (const effect of transaction.effects) {
+				if (effect.is(focusEffect)) editorFocused = effect.value;
+			}
+			const placement = getPlacement();
+			const truncateTitles = getTruncateTitles();
+			const selectionChanged = !transaction.startState.selection.eq(
+				transaction.state.selection,
+			);
+			if (
+				!transaction.docChanged &&
+				!selectionChanged &&
+				editorFocused === value.editorFocused &&
+				placement === value.placement && truncateTitles === value.truncateTitles
+			) {
+				return value;
+			}
+			return {
+				decorations: safeBuildDecorations(
+					transaction.state,
+					app,
+					placement,
+					!editorFocused,
+					truncateTitles,
+				),
+				editorFocused,
+				placement,
+				truncateTitles,
+			};
 		},
-	);
+		provide(field) {
+			return [
+				// Block and multiline replacements must be available before layout.
+				// A ViewPlugin decorations callback runs after viewport computation.
+				EditorView.decorations.from(field, (value) => value.decorations),
+				EditorView.atomicRanges.of(
+					(view) => view.state.field(field).decorations,
+				),
+			];
+		},
+	});
+
+	function setEditorFocused(view: EditorView, focused: boolean): void {
+		const current = view.state.field(decorationField, false);
+		if (!current || current.editorFocused === focused) return;
+		view.dispatch({ effects: focusEffect.of(focused) });
+	}
+
+	const focusWatcher = ViewPlugin.fromClass(class {
+		private destroyed = false;
+		private scheduled = false;
+
+		constructor(private readonly view: EditorView) {
+			view.dom.addEventListener('focusin', this.scheduleFocusUpdate);
+			view.dom.addEventListener('focusout', this.scheduleFocusUpdate);
+			this.scheduleFocusUpdate();
+		}
+
+		private readonly scheduleFocusUpdate = (): void => {
+			if (this.scheduled) return;
+			this.scheduled = true;
+			// Removing a focused widget can fire blur during an editor update.
+			// Defer and coalesce focus events to avoid reentrant dispatches.
+			queueMicrotask(() => {
+				this.scheduled = false;
+				if (this.destroyed) return;
+				setEditorFocused(this.view,
+					this.view.hasFocus &&
+					!eventTargetsWidget(this.view.dom.ownerDocument.activeElement),
+				);
+			});
+		};
+
+		destroy(): void {
+			this.destroyed = true;
+			this.view.dom.removeEventListener('focusin', this.scheduleFocusUpdate);
+			this.view.dom.removeEventListener('focusout', this.scheduleFocusUpdate);
+		}
+	});
+
+	return [decorationField, focusWatcher,
+		protectCardDeletion((state) => state.field(decorationField).decorations, focusEffect, getPlacement)];
 }

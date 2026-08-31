@@ -2,6 +2,7 @@ export type CardPlacement = 'inline' | 'document-end';
 
 export interface AnkiCardManagerSettings {
 	cardPlacement: CardPlacement;
+	truncateTitles: boolean;
 	autoCompleteCards: boolean;
 	defaultCardType: string;
 	defaultDeck: string;

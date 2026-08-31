@@ -1,17 +1,28 @@
 :root {
 	--anki-card-manager-accent: var(--color-yellow);
+	--anki-card-manager-halo: 0 0 8px 1px rgb(0 0 0 / 15%);
+	--anki-card-manager-registered: #2978cf;
+	--anki-card-manager-unregistered: #c93e4e;
+	--anki-card-manager-mask: #dbe8f5;
+}
+
+.theme-dark {
+	--anki-card-manager-halo: 0 0 8px 1px rgb(255 255 255 / 20%);
+	--anki-card-manager-registered: #79baff;
+	--anki-card-manager-unregistered: #ff8995;
+	--anki-card-manager-mask: #3c526b;
 }
 
 .anki-card-manager-editor-widget {
 	display: block;
-	margin: var(--size-4-3) 0;
+	white-space: normal;
+	padding: var(--size-4-3) 0;
 	width: 100%;
 }
 
 .anki-card-manager-editor-widget.is-document-end {
 	border-top: 1px solid var(--background-modifier-border);
-	margin-top: var(--size-4-8);
-	padding-top: var(--size-4-4);
+	padding-top: var(--size-4-8);
 }
 
 .anki-card-manager-collection-heading {
@@ -29,9 +40,29 @@
 	border: 1px solid color-mix(in srgb, var(--anki-card-color) 34%, var(--background-modifier-border));
 	border-left: 4px solid var(--anki-card-color);
 	border-radius: var(--radius-m);
-	box-shadow: var(--shadow-s);
+	box-shadow: var(--anki-card-manager-halo);
 	margin: var(--size-4-2) 0;
 	overflow: clip;
+}
+
+.anki-card-manager-stack {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--anki-card-manager-halo);
+	margin: var(--size-4-2) 0;
+	overflow: hidden;
+}
+
+.anki-card-manager-stack > .anki-card-manager-card {
+	border: 0;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-radius: 0;
+	box-shadow: none;
+	margin: 0;
+}
+
+.anki-card-manager-stack > .anki-card-manager-card:last-child {
+	border-bottom: 0;
 }
 
 .anki-card-manager-summary {
@@ -59,14 +90,46 @@
 	transition: transform 140ms ease;
 }
 
+.anki-card-manager-summary:has(.anki-card-manager-edit-source) {
+	grid-template-columns: 22px minmax(0, 1fr) 28px 12px;
+}
+
+.anki-card-manager-summary:has(.anki-card-manager-edit-source)::after {
+	grid-column: 4;
+}
+
+.anki-card-manager-edit-source {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 5px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 50%;
+	background: var(--background-modifier-hover, #e8e8e8);
+	color: var(--text-muted);
+	box-shadow: none;
+}
+
+.anki-card-manager-edit-source svg,
+.anki-card-manager-cloze-toggle svg {
+	width: 15px;
+	height: 15px;
+}
+
 .anki-card-manager-card[open] > .anki-card-manager-summary::after {
 	transform: rotate(-90deg);
 }
 
 .anki-card-manager-summary-icon {
-	color: var(--anki-card-color);
+	color: var(--anki-card-manager-registered);
 	display: inline-flex;
 	margin-top: 2px;
+}
+
+.anki-card-manager-card.is-unregistered .anki-card-manager-summary-icon {
+	color: var(--anki-card-manager-unregistered);
 }
 
 .anki-card-manager-summary-icon svg {
@@ -78,6 +141,26 @@
 	color: var(--text-normal);
 	font-weight: var(--font-semibold);
 	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.is-title-truncated .anki-card-manager-question {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.is-title-truncated .anki-card-manager-question * {
+	display: inline;
+	white-space: nowrap;
+}
+
+.is-title-truncated .anki-card-manager-question br {
+	display: none;
+}
+
+.is-title-truncated .anki-card-manager-question p + p::before {
+	content: " ";
 }
 
 .anki-card-manager-question > :first-child,
@@ -120,13 +203,56 @@
 	padding: var(--size-4-3) var(--size-4-4) var(--size-4-4);
 }
 
-.anki-card-manager-answer-label {
+.anki-card-manager-answer-header {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--size-4-2);
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
-	font-weight: var(--font-semibold);
-	letter-spacing: 0.06em;
 	margin-bottom: var(--size-4-2);
-	text-transform: uppercase;
+}
+
+.anki-card-manager-cloze-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	padding: 3px 7px;
+	height: auto;
+	box-shadow: none;
+}
+
+.anki-card-manager-cloze-mask {
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
+	border-radius: 2px;
+	padding: 1px 4px;
+	min-width: 2ch;
+	display: inline;
+	cursor: pointer;
+}
+
+.anki-card-manager-cloze-mask.is-hidden {
+	background: var(--anki-card-manager-mask);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+
+.anki-card-manager-cloze-text > p {
+	display: inline;
+	margin: 0;
+}
+
+.anki-card-manager-cloze-mask:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+.is-rendering-cloze,
+.anki-card-manager-cloze-mask.is-hidden .anki-card-manager-cloze-text,
+.anki-card-manager-cloze-mask.is-hidden .anki-card-manager-cloze-text * {
+	visibility: hidden !important;
 }
 
 .anki-card-manager-card-metadata {
@@ -315,13 +441,27 @@
 }
 
 @media (max-width: 800px) {
-	.anki-card-manager-summary {
-		grid-template-columns: 20px minmax(0, 1fr) auto auto;
+	.anki-card-manager-summary,
+	.anki-card-manager-summary:has(.anki-card-manager-edit-source) {
+		grid-template-columns: 20px minmax(0, 1fr) 28px 12px;
+	}
+
+	.anki-card-manager-summary::after,
+	.anki-card-manager-summary:has(.anki-card-manager-edit-source)::after {
+		grid-column: 4;
+		grid-row: 1;
 	}
 
 	.anki-card-manager-badges {
-		grid-column: 2 / -1;
+		grid-column: 2;
+		grid-row: 2;
 		justify-content: flex-start;
+	}
+
+	.anki-card-manager-edit-source {
+		grid-column: 3;
+		grid-row: 1;
+		align-self: start;
 	}
 
 	.anki-card-manager-controls {

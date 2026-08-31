@@ -1,6 +1,7 @@
 import { MarkdownView, Notice, TFile } from 'obsidian';
 import type { App, Editor, MarkdownFileInfo } from 'obsidian';
-import { REGISTERED_END, REGISTERED_START } from './parser';
+import { cardSeparator, REGISTERED_END, REGISTERED_START } from './parser';
+import { hasOwnClosingMarker } from './completion';
 import { ensureAnkiFrontmatter } from './metadata';
 import type { AnkiCardManagerSettings } from './types';
 
@@ -19,17 +20,17 @@ export class AnkiCardAutoCompleter {
 	async onEditorChange(editor: Editor, info: MarkdownFileInfo): Promise<void> {
 		if (this.inserting || !this.getSettings().autoCompleteCards) return;
 		const cursor = editor.getCursor();
-		if (editor.getLine(cursor.line).trim() !== REGISTERED_START) return;
-		if (
-			cursor.line + 1 < editor.lineCount() &&
-			editor.getLine(cursor.line + 1).trim() ===
-				this.getSettings().defaultCardType
-		) {
-			return;
-		}
+		// Also handle Enter after a start marker (the cursor is now on the next line).
+		const line = editor.getLine(cursor.line).trim() === REGISTERED_START ? cursor.line :
+			cursor.ch === 0 && cursor.line > 0 && editor.getLine(cursor.line - 1).trim() === REGISTERED_START
+				? cursor.line - 1 : -1;
+		if (line < 0) return;
+		const tail = editor.getRange({ line, ch: editor.getLine(line).length },
+			{ line: editor.lastLine(), ch: editor.getLine(editor.lastLine()).length });
+		if (hasOwnClosingMarker(tail)) return;
 		this.inserting = true;
 		try {
-			await this.completeAtLine(editor, info, cursor.line, { advanceCursor: true });
+			await this.completeAtLine(editor, info, line, { advanceCursor: true });
 		} finally {
 			this.inserting = false;
 		}
@@ -66,7 +67,7 @@ export class AnkiCardAutoCompleter {
 		const settings = this.getSettings();
 		const newline = '\n';
 		editor.replaceRange(
-			`${newline}${settings.defaultCardType}${newline}${newline}Back:${newline}${newline}${REGISTERED_END}`,
+			`${newline}${settings.defaultCardType}${newline}${newline}${cardSeparator(settings.defaultCardType)}${newline}${newline}${REGISTERED_END}`,
 			{ line, ch: editor.getLine(line).length },
 		);
 		if (options.advanceCursor) {

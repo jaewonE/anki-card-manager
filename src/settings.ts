@@ -4,6 +4,7 @@ import type { AnkiCardManagerSettings, CardPlacement } from './types';
 
 export const DEFAULT_SETTINGS: AnkiCardManagerSettings = {
 	cardPlacement: 'inline',
+	truncateTitles: false,
 	autoCompleteCards: true,
 	defaultCardType: 'Obsidian-Basic',
 	defaultDeck: 'Inbox',
@@ -38,6 +39,17 @@ export class AnkiCardManagerSettingTab extends PluginSettingTab {
 						this.plugin.refreshEditorDecorations();
 					}),
 			);
+
+		new Setting(containerEl)
+			.setName('Single-line titles')
+			.setDesc('Keep questions on one line and replace overflow with an ellipsis. Off by default.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.truncateTitles)
+				.onChange(async (value) => {
+					this.plugin.settings.truncateTitles = value;
+					await this.plugin.saveSettings();
+					this.plugin.refreshEditorDecorations();
+				}));
 
 		new Setting(containerEl)
 			.setName('Complete start markers')

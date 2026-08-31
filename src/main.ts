@@ -30,6 +30,7 @@ export default class AnkiCardManagerPlugin extends Plugin {
 			createAnkiCardEditorExtension(
 				this.app,
 				() => this.settings.cardPlacement,
+				() => this.settings.truncateTitles,
 			),
 		);
 		this.registerEvent(

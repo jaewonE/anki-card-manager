@@ -6,6 +6,9 @@ export const UNREGISTERED_START = '<ANKI_START>';
 export const UNREGISTERED_END = '<ANKI_END>';
 
 const BACK_SEPARATOR = 'Back:';
+export function cardSeparator(cardType: string): string {
+	return cardType.trim() === 'Cloze' ? 'Text:' : BACK_SEPARATOR;
+}
 const ID_LINE_PATTERN = /^\s*<!--ID:\s*([^>]*?)\s*-->\s*$/;
 
 interface SourceLine {
@@ -95,11 +98,12 @@ export function parseAnkiCards(
 		let endIndex = index + 1;
 		while (
 			endIndex < lines.length &&
-			lines[endIndex]?.text.trim() !== endMarker
+			lines[endIndex]?.text.trim() !== endMarker &&
+			markerKind(lines[endIndex]?.text ?? '') === undefined
 		) {
 			endIndex += 1;
 		}
-		if (endIndex >= lines.length) continue;
+		if (endIndex >= lines.length || lines[endIndex]?.text.trim() !== endMarker) continue;
 
 		const typeLine = lines[index + 1];
 		if (!typeLine || index + 1 >= endIndex) {
@@ -110,7 +114,7 @@ export function parseAnkiCards(
 		let backIndex = index + 2;
 		while (
 			backIndex < endIndex &&
-			lines[backIndex]?.text.trim() !== BACK_SEPARATOR
+			lines[backIndex]?.text.trim() !== cardSeparator(typeLine.text)
 		) {
 			backIndex += 1;
 		}
@@ -202,7 +206,7 @@ export function serializeCard(card: AnkiCard, edit: CardEdit): string {
 		start,
 		edit.cardType.trim(),
 		...normalizeField(edit.front),
-		BACK_SEPARATOR,
+		cardSeparator(edit.cardType),
 		...normalizeField(edit.back),
 	];
 	if (card.registered && card.id) {

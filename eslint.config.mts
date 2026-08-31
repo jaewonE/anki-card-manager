@@ -8,6 +8,7 @@ export default defineConfig(
 		'dist',
 		'esbuild.config.mjs',
 		'version-bump.mjs',
+		'scripts/serve-editor-test.mjs',
 		'versions.json',
 		'main.js',
 		'package.json',
@@ -40,6 +41,9 @@ export default defineConfig(
 		rules: {
 			'@typescript-eslint/no-floating-promises': 'off',
 			'obsidianmd/no-nodejs-modules': 'off',
+			'obsidianmd/no-global-this': 'off',
+			'obsidianmd/prefer-window-timers': 'off',
+			'obsidianmd/prefer-create-el': 'off',
 		},
 	},
 );

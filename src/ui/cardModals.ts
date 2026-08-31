@@ -35,7 +35,7 @@ export class EditCardModal extends Modal {
 		this.createTextarea('Question', this.edit.front, (value) => {
 			this.edit.front = value;
 		});
-		this.createTextarea('Answer', this.edit.back, (value) => {
+		this.createTextarea('Answer / cloze text', this.edit.back, (value) => {
 			this.edit.back = value;
 		});
 
