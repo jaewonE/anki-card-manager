@@ -211,8 +211,9 @@ export class AnkiManagerView extends ItemView {
 		if (!filtered.length) this.results.createDiv({ cls: 'anki-card-manager-empty', text: `No cards found. Change the filters or insert ${this.getMarkers().registeredStart} in a Markdown file.` });
 		else {
 			const toolbar = this.results.createDiv({ cls: 'anki-card-manager-results-toolbar' });
-			const selectAll = toolbar.createEl('label', { cls: 'anki-card-manager-select-all', text: 'Select all matching cards ' });
+			const selectAll = toolbar.createEl('label', { cls: 'anki-card-manager-select-all' });
 			this.selectionBox(selectAll, filtered, 'Select all matching cards');
+			selectAll.createSpan({ text: 'Select all matching cards' });
 			if (this.byDeck || this.byTag) {
 				this.collapseButton = toolbar.createEl('button', { attr: { type: 'button' } });
 				this.collapseButton.addEventListener('click', () => this.toggleAllGroups());

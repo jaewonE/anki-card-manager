@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.0**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.1**.
 
 ## Features
 
@@ -76,7 +76,7 @@ The viewer also accepts the supplied single-colon form `{{c1:answer}}`; viewing 
 
 Expand a card and select its type label with the downward triangle. A native Obsidian floating menu offers **Obsidian-Basic** and **Cloze**, including keyboard selection. Converting Cloze to Basic changes `Text:` to `Back:` and unwraps single/double-colon cloze tokens in the question and answer, retaining the answer text and Markdown while removing hints. Converting Basic to Cloze changes the type and separator to `Text:` without adding blanks. IDs and registration state are preserved during type changes.
 
-Select **Registered** or **Unregistered** beside the type to toggle registration. Its color matches the card icon. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. In Live Preview the card stays open and updates use ordinary editor undo/save. Reading-view controls update the source file and refresh the preview. This status describes Markdown markers, not whether a note currently exists in Anki.
+Select **Registered** or **Unregistered** beside the type to toggle registration. Its color matches the card icon: blue when registered and red when unregistered, with the brighter configured variants in dark mode. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. In Live Preview the card stays open and updates use ordinary editor undo/save. Reading-view controls update the source file and refresh the preview. This status describes Markdown markers, not whether a note currently exists in Anki.
 
 ## Usage
 

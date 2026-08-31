@@ -28,7 +28,7 @@ export function renderTable(container: HTMLElement, cards: AnkiCard[], actions: 
 			['Type', card.cardType], ['Deck', card.deck || 'No deck'], ['Tags', card.tags.join(', ') || 'Untagged'],
 		]) row.createEl('td', { text, attr: { 'data-label': label! } });
 		const source = row.createEl('td', { attr: { 'data-label': 'Source' } }).createEl('button', {
-			cls: 'anki-card-manager-source-link', text: `${card.sourcePath}:${card.startLine + 1}`,
+			cls: ['anki-card-manager-source-link', 'anki-card-manager-question-link'], text: `${card.sourcePath}:${card.startLine + 1}`,
 		});
 		source.addEventListener('click', () => actions.open(card));
 		const status = row.createEl('td', { attr: { 'data-label': 'Status' } });

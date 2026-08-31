@@ -342,6 +342,7 @@ test('manager has supplied icons, labeled controls, eight columns and dynamic ty
 		assert.ok(container.textContent?.includes('Search/Filter'));
 		assert.ok(container.textContent?.includes('Grouping'));
 		assert.ok(container.textContent?.includes('Change state | 0 selected'));
+		assert.ok(container.querySelector('.anki-card-manager-source-link')?.classList.contains('anki-card-manager-question-link'));
 		assert.equal(container.querySelector('[data-icon="carbon--filter-reset"] svg')?.getAttribute('viewBox'), '0 0 32 32');
 		assert.equal(container.querySelector('[data-icon="ant-design--file-sync-outlined"] svg')?.getAttribute('viewBox'), '0 0 1024 1024');
 		const type = container.querySelector<HTMLSelectElement>('[aria-label="Filter card type"]')!;
@@ -361,6 +362,11 @@ test('group labels distinguish deck/tag and collapse-all tracks every descendant
 	try {
 		button(container, 'Group by deck hierarchy').click(); button(container, 'Group by tag').click();
 		assert.ok(container.textContent?.includes('Deck: Mother (3)')); assert.ok(container.textContent?.includes('Tag: Inbox (2)'));
+		const selectAll = container.querySelector<HTMLElement>('.anki-card-manager-select-all')!;
+		const selectBox = selectAll.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!;
+		assert.equal(selectAll.firstElementChild, selectBox);
+		assert.equal(selectAll.querySelector('span')?.textContent, 'Select all matching cards');
+		assert.equal(button(container, '전체 접기').previousElementSibling, selectAll);
 		button(container, '전체 접기').click();
 		assert.equal(container.querySelectorAll('details[open]').length, 0);
 		button(container, '전체 펼치기').click();
