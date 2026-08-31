@@ -7,6 +7,7 @@ import {
 	unregisterCardRaw,
 } from './parser';
 import type { AnkiCard, CardEdit } from './types';
+import type { SupportedCardType } from './cardTypes';
 
 export class CardConflictError extends Error {
 	constructor() {
@@ -22,7 +23,7 @@ function resolveCurrentCard(source: string, card: AnkiCard): AnkiCard {
 	) {
 		return card;
 	}
-	const cards = parseAnkiCards(source, card.sourcePath);
+	const cards = parseAnkiCards(source, card.sourcePath, undefined, card.markers);
 	if (card.id) {
 		const idMatches = cards.filter((candidate) => candidate.id === card.id);
 		if (idMatches.length === 1 && idMatches[0]) return idMatches[0];
@@ -66,8 +67,8 @@ export async function toggleCardRegistration(
 ): Promise<void> {
 	await mutateCard(app, card, (current) =>
 		current.registered
-			? unregisterCardRaw(current.raw)
-			: registerCardRaw(current.raw),
+			? unregisterCardRaw(current.raw, current.markers)
+			: registerCardRaw(current.raw, current.markers),
 	);
 }
 
@@ -77,4 +78,8 @@ export async function updateCard(
 	edit: CardEdit,
 ): Promise<void> {
 	await mutateCard(app, card, (current) => serializeCard(current, edit));
+}
+
+export async function changeCardType(app: App, card: AnkiCard, type: SupportedCardType): Promise<void> {
+	await mutateCard(app, card, (current) => serializeCard(current, { ...current, cardType: type }));
 }

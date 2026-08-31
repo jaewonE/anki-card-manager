@@ -3,10 +3,13 @@ import { Component } from 'obsidian';
 import type { App } from 'obsidian';
 import { renderAnkiCard } from './cardRenderer';
 import type { AnkiCard } from './types';
+import { registerCardRaw, serializeCard, unregisterCardRaw } from './parser';
+import { CardConflictError } from './cardActions';
 
 // CodeMirror can reuse DOM while replacing an equal WidgetType instance.
 // Own the Markdown lifecycle by DOM node, not by the transient widget object.
 const components = new WeakMap<HTMLElement, Component>();
+const reopen = new WeakMap<EditorView, number>();
 
 export class AnkiCardsWidget extends WidgetType {
 	constructor(
@@ -42,9 +45,17 @@ export class AnkiCardsWidget extends WidgetType {
 		const target = this.collection || this.cards.length > 1
 			? container.createDiv({ cls: 'anki-card-manager-stack' }) : container;
 		for (const card of this.cards) {
-			renderAnkiCard(this.app, target, card, component, {
+			const mutate = (raw: string): void => {
+				if (!components.has(container) || view.state.doc.sliceString(card.from, card.to) !== card.raw) throw new CardConflictError();
+				reopen.set(view, card.from);
+				// Use the live editor transaction: native undo/save and unsaved text stay intact.
+				view.dispatch({ changes: { from: card.from, to: card.to, insert: raw }, userEvent: 'input' });
+			};
+			const details = renderAnkiCard(this.app, target, card, component, {
 				compact: this.collection,
 				truncateTitle: this.truncateTitles,
+				onTypeChange: (type) => mutate(serializeCard(card, { ...card, cardType: type })),
+				onToggleRegistration: () => mutate(card.registered ? unregisterCardRaw(card.raw, card.markers) : registerCardRaw(card.raw, card.markers)),
 				onSizeChange: () => {
 					if (components.has(container) && container.isConnected) view.requestMeasure();
 				},
@@ -53,6 +64,7 @@ export class AnkiCardsWidget extends WidgetType {
 					view.focus();
 				},
 			});
+			if (reopen.get(view) === card.from) { details.open = true; reopen.delete(view); }
 		}
 		return container;
 	}

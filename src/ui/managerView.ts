@@ -7,6 +7,8 @@ import type { CardGroup, RegistrationFilter } from '../managerModel';
 import { matchesSearch, parseSearch } from '../managerSearch';
 import { parseAnkiCards } from '../parser';
 import type { AnkiCard } from '../types';
+import { DEFAULT_MARKERS } from '../markers';
+import type { CardMarkers } from '../markers';
 import { BulkActionModal } from './bulkModal';
 import { DeleteCardModal, EditCardModal } from './cardModals';
 import { iconButton, renderTable } from './managerTable';
@@ -37,7 +39,8 @@ export class AnkiManagerView extends ItemView {
 	private syncButton!: HTMLButtonElement;
 	private readonly scheduleRefresh = debounce(() => { if (this.opened) void this.refresh(); }, 350, true);
 
-	constructor(leaf: WorkspaceLeaf) { super(leaf); }
+	constructor(leaf: WorkspaceLeaf, private readonly getMarkers: () => CardMarkers = () => DEFAULT_MARKERS,
+		private readonly isBlocked: () => boolean = () => false) { super(leaf); }
 	getViewType(): string { return ANKI_MANAGER_VIEW_TYPE; }
 	getDisplayText(): string { return 'Anki card manager'; }
 	getIcon(): string { return 'library-big'; }
@@ -70,7 +73,7 @@ export class AnkiManagerView extends ItemView {
 			try {
 				const source = await this.app.vault.cachedRead(file);
 				// YAML and cards must come from one snapshot, not a lagging metadata cache.
-				return parseAnkiCards(source, file.path, cardMetadataFromSource(source));
+				return parseAnkiCards(source, file.path, cardMetadataFromSource(source), this.getMarkers());
 			} catch { failures += 1; return []; }
 		}));
 		if (sequence !== this.refreshSequence || !this.opened) return;
@@ -138,6 +141,14 @@ export class AnkiManagerView extends ItemView {
 	}
 
 	private renderResults(): void {
+		if (this.isBlocked()) {
+			this.selected.clear();
+			this.checkboxes = [];
+			this.results.empty();
+			this.results.createEl('p', { text: 'Trigger migration is pending. Finish or recover it in plugin settings before managing cards.' });
+			this.updateSelection();
+			return;
+		}
 		const terms = parseSearch(this.query);
 		const filtered = this.cards.filter((card) => matchesSearch(card, terms) && (this.registrationFilter === 'all' ||
 			(card.registered ? 'registered' : 'unregistered') === this.registrationFilter));
@@ -148,7 +159,7 @@ export class AnkiManagerView extends ItemView {
 		this.count.setText(`${filtered.length} matching cards${this.byTag ? ' · Multi-tag cards appear in each tag group; counts and selection are unique.' : ''}`);
 		this.results.empty();
 		this.checkboxes = [];
-		if (!filtered.length) this.results.createDiv({ cls: 'anki-card-manager-empty', text: 'No cards found. Change the filters or insert <START_ANKI> in a Markdown file.' });
+		if (!filtered.length) this.results.createDiv({ cls: 'anki-card-manager-empty', text: `No cards found. Change the filters or insert ${this.getMarkers().registeredStart} in a Markdown file.` });
 		else {
 			const selectAll = this.results.createEl('label', { cls: 'anki-card-manager-select-all', text: 'Select all matching cards ' });
 			this.selectionBox(selectAll, filtered, 'Select all matching cards');

@@ -1,13 +1,15 @@
 import type { AnkiCard, CardEdit, CardMetadata } from './types';
+import { DEFAULT_MARKERS } from './markers';
+import type { CardMarkers } from './markers';
+import { cardTypeDefinition, convertCardField } from './cardTypes';
 
-export const REGISTERED_START = '<START_ANKI>';
-export const REGISTERED_END = '<END_ANKI>';
-export const UNREGISTERED_START = '<ANKI_START>';
-export const UNREGISTERED_END = '<ANKI_END>';
+export const REGISTERED_START = DEFAULT_MARKERS.registeredStart;
+export const REGISTERED_END = DEFAULT_MARKERS.registeredEnd;
+export const UNREGISTERED_START = DEFAULT_MARKERS.unregisteredStart;
+export const UNREGISTERED_END = DEFAULT_MARKERS.unregisteredEnd;
 
-const BACK_SEPARATOR = 'Back:';
 export function cardSeparator(cardType: string): string {
-	return cardType.trim() === 'Cloze' ? 'Text:' : BACK_SEPARATOR;
+	return cardTypeDefinition(cardType).separator;
 }
 const ID_LINE_PATTERN = /^\s*<!--ID:\s*([^>]*?)\s*-->\s*$/;
 
@@ -52,10 +54,10 @@ function trimBlankEdges(lines: string[]): string {
 	return lines.slice(start, end).join('\n');
 }
 
-function markerKind(line: string): boolean | undefined {
+function markerKind(line: string, markers: CardMarkers): boolean | undefined {
 	const marker = line.trim();
-	if (marker === REGISTERED_START) return true;
-	if (marker === UNREGISTERED_START) return false;
+	if (marker === markers.registeredStart) return true;
+	if (marker === markers.unregisteredStart) return false;
 	return undefined;
 }
 
@@ -84,6 +86,7 @@ export function parseAnkiCards(
 	source: string,
 	sourcePath = '',
 	metadata: CardMetadata = EMPTY_METADATA,
+	markers: CardMarkers = DEFAULT_MARKERS,
 ): AnkiCard[] {
 	const lines = sourceLines(source);
 	const cards: AnkiCard[] = [];
@@ -91,15 +94,15 @@ export function parseAnkiCards(
 	for (let index = 0; index < lines.length; index += 1) {
 		const startLine = lines[index];
 		if (!startLine) continue;
-		const registered = markerKind(startLine.text);
+		const registered = markerKind(startLine.text, markers);
 		if (registered === undefined) continue;
 
-		const endMarker = registered ? REGISTERED_END : UNREGISTERED_END;
+		const endMarker = registered ? markers.registeredEnd : markers.unregisteredEnd;
 		let endIndex = index + 1;
 		while (
 			endIndex < lines.length &&
 			lines[endIndex]?.text.trim() !== endMarker &&
-			markerKind(lines[endIndex]?.text ?? '') === undefined
+			markerKind(lines[endIndex]?.text ?? '', markers) === undefined
 		) {
 			endIndex += 1;
 		}
@@ -148,6 +151,7 @@ export function parseAnkiCards(
 			.map((line) => line.text);
 
 		cards.push({
+			markers: { ...markers },
 			key: `${sourcePath}:${from}:${to}`,
 			sourcePath,
 			registered,
@@ -181,15 +185,15 @@ function replaceMarkerLine(raw: string, from: string, to: string): string {
 	);
 }
 
-export function unregisterCardRaw(raw: string): string {
-	let updated = replaceMarkerLine(raw, REGISTERED_START, UNREGISTERED_START);
-	updated = replaceMarkerLine(updated, REGISTERED_END, UNREGISTERED_END);
+export function unregisterCardRaw(raw: string, markers: CardMarkers = DEFAULT_MARKERS): string {
+	let updated = replaceMarkerLine(raw, markers.registeredStart, markers.unregisteredStart);
+	updated = replaceMarkerLine(updated, markers.registeredEnd, markers.unregisteredEnd);
 	return updated.replace(/^[\t ]*<!--ID:[\t ]*[^>]*?[\t ]*-->[\t ]*(?:\r?\n|$)/gm, '');
 }
 
-export function registerCardRaw(raw: string): string {
-	let updated = replaceMarkerLine(raw, UNREGISTERED_START, REGISTERED_START);
-	updated = replaceMarkerLine(updated, UNREGISTERED_END, REGISTERED_END);
+export function registerCardRaw(raw: string, markers: CardMarkers = DEFAULT_MARKERS): string {
+	let updated = replaceMarkerLine(raw, markers.unregisteredStart, markers.registeredStart);
+	updated = replaceMarkerLine(updated, markers.unregisteredEnd, markers.registeredEnd);
 	return updated;
 }
 
@@ -200,14 +204,14 @@ function normalizeField(value: string): string[] {
 export function serializeCard(card: AnkiCard, edit: CardEdit): string {
 	const eol = card.raw.includes('\r\n') ? '\r\n' : '\n';
 	const hasTrailingEol = /\r?\n$/.test(card.raw);
-	const start = card.registered ? REGISTERED_START : UNREGISTERED_START;
-	const end = card.registered ? REGISTERED_END : UNREGISTERED_END;
+	const start = card.registered ? card.markers.registeredStart : card.markers.unregisteredStart;
+	const end = card.registered ? card.markers.registeredEnd : card.markers.unregisteredEnd;
 	const lines = [
 		start,
 		edit.cardType.trim(),
-		...normalizeField(edit.front),
+		...normalizeField(convertCardField(edit.front, card.cardType, edit.cardType.trim())),
 		cardSeparator(edit.cardType),
-		...normalizeField(edit.back),
+		...normalizeField(convertCardField(edit.back, card.cardType, edit.cardType.trim())),
 	];
 	if (card.registered && card.id) {
 		lines.push(`<!--ID: ${card.id}-->`);

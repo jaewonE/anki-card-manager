@@ -1,3 +1,4 @@
+import type { CardMarkers } from './markers';
 export type CardPlacement = 'inline' | 'document-end';
 
 export interface AnkiCardManagerSettings {
@@ -7,9 +8,11 @@ export interface AnkiCardManagerSettings {
 	defaultCardType: string;
 	defaultDeck: string;
 	defaultTag: string;
+	markers: CardMarkers;
 }
 
 export interface AnkiCard {
+	markers: CardMarkers;
 	key: string;
 	sourcePath: string;
 	registered: boolean;

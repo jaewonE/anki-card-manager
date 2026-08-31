@@ -4,16 +4,19 @@ import { EditorView, keymap } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import { parseAnkiCards } from './parser';
 import type { AnkiCard, CardPlacement } from './types';
+import { DEFAULT_MARKERS } from './markers';
+import type { CardMarkers } from './markers';
 
 export function protectCardDeletion(
 	getDecorations: (state: EditorState) => DecorationSet,
 	focusEffect: StateEffectType<boolean>,
 	getPlacement: () => CardPlacement,
+	getMarkers: () => CardMarkers = () => DEFAULT_MARKERS,
 ): Extension {
 	function target(state: EditorState, backward: boolean, transaction?: Transaction): AnkiCard | undefined {
 		if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return;
 		const position = state.selection.main.head;
-		const cards = parseAnkiCards(state.doc.toString());
+		const cards = parseAnkiCards(state.doc.toString(), '', undefined, getMarkers());
 		let result: AnkiCard | undefined;
 		const atCollection = backward && getPlacement() === 'document-end' && position === state.doc.length &&
 			!cards.some((card) => position >= card.renderFrom && position <= card.renderTo);

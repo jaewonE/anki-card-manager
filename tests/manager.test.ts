@@ -8,6 +8,10 @@ import { JSDOM } from 'jsdom';
 import type { App, WorkspaceLeaf } from 'obsidian';
 import { parseAnkiCards } from '../src/parser';
 import { installDomHelpers } from './support/dom';
+import { DEFAULT_MARKERS, replaceTriggers } from '../src/markers';
+import type { CardMarkers } from '../src/markers';
+import type { TriggerJournal, TriggerJournalStore } from '../src/triggerMigration';
+import type AnkiCardManagerPlugin from '../src/main';
 
 type Harness = typeof import('./support/managerHarness');
 let harness: Harness;
@@ -267,4 +271,175 @@ test('confirmed bulk deck change writes YAML once then refreshes rows from curre
 	assert.equal(container.querySelector('[data-label=Deck]')?.textContent, 'New::Child');
 	assert.equal(dom.window.document.querySelector('.modal'), null);
 	await close();
+});
+
+const custom = { registeredStart: '[RS.$]', registeredEnd: '[RE.$]', unregisteredStart: '[US.$]', unregisteredEnd: '[UE.$]' };
+function migrationStore() {
+	let pending: TriggerJournal | null = null;
+	const backups: TriggerJournal[] = [];
+	const store: TriggerJournalStore = {
+		read: () => Promise.resolve(pending),
+		write: (journal) => { pending = JSON.parse(JSON.stringify(journal)) as TriggerJournal; return Promise.resolve(); },
+		archive: () => { if (pending) backups.push(pending); pending = null; return Promise.resolve('trigger-backups/test.json'); },
+	};
+	return { store, backups };
+}
+
+test('trigger migration journals before writes, replaces all literals and saves settings only after every file', async () => {
+	const { app, sources, writes } = appFor(new Map([['a.md', note + 'Example <START_ANKI>'], ['b.md', basic('Three')], ['keep.md', 'untouched']]));
+	const { store, backups } = migrationStore();
+	const original = app.vault.process.bind(app.vault);
+	app.vault.process = async (file, transform) => { assert.ok(await store.read(), 'backup precedes every source write'); return original(file, transform); };
+	let saved: CardMarkers = { ...DEFAULT_MARKERS };
+	const result = await harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, (value) => {
+		assert.deepEqual(writes, ['a.md', 'b.md']); saved = value; return Promise.resolve();
+	});
+	assert.equal(result.files, 2);
+	assert.equal(saved.registeredStart, custom.registeredStart);
+	assert.equal(sources.get('a.md'), replaceTriggers(note + 'Example <START_ANKI>', DEFAULT_MARKERS, custom));
+	assert.equal(sources.get('keep.md'), 'untouched');
+	assert.equal(backups[0]!.files[0]!.before, note + 'Example <START_ANKI>');
+	assert.equal(await store.read(), null);
+	const cards = parseAnkiCards(sources.get('a.md')!, 'a.md', harness.cardMetadataFromSource(sources.get('a.md')!), custom);
+	const updated = harness.transformBulkSource(sources.get('a.md')!, [cards[0]!], { kind: 'unregister' }, cards);
+	assert.equal(parseAnkiCards(updated, 'a.md', undefined, custom)[0]!.registered, false);
+});
+
+test('trigger backup/read failures prevent source writes and settings changes', async () => {
+	const { app, writes } = appFor();
+	const { store } = migrationStore();
+	store.write = () => Promise.reject(new Error('disk full'));
+	let saved = false;
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, () => { saved = true; return Promise.resolve(); }), /disk full/);
+	assert.equal(writes.length, 0); assert.equal(saved, false);
+	app.vault.read = () => Promise.reject(new Error('cannot read'));
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, migrationStore().store, () => Promise.resolve()), /cannot read/);
+	assert.equal(writes.length, 0);
+});
+
+test('failed source writes roll back exact original snapshots and old settings', async () => {
+	const { app, sources } = appFor();
+	const originalSources = new Map(sources);
+	const { store, backups } = migrationStore();
+	const process = app.vault.process.bind(app.vault);
+	let fail = true;
+	app.vault.process = (file, transform) => {
+		if (file.path === 'b.md' && fail) { fail = false; return Promise.reject(new Error('write failed')); }
+		return process(file, transform);
+	};
+	let saved: CardMarkers | undefined;
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, (value) => { saved = value; return Promise.resolve(); }), /Original files and triggers were restored/);
+	assert.deepEqual(sources, originalSources);
+	assert.equal(saved!.registeredStart, DEFAULT_MARKERS.registeredStart);
+	assert.equal(backups.length, 1); assert.equal(await store.read(), null);
+});
+
+test('failed settings commit rolls back sources; failed archive can finalize after restart without overwriting edits', async () => {
+	const { app, sources } = appFor();
+	const { store } = migrationStore();
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, (value) =>
+		value.registeredStart === custom.registeredStart ? Promise.reject(new Error('settings failed')) : Promise.resolve()), /Original files/);
+	assert.equal(sources.get('a.md'), note);
+	const archive = store.archive.bind(store);
+	store.archive = () => Promise.reject(new Error('archive failed'));
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, () => Promise.resolve()), /Triggers were applied/);
+	store.archive = archive;
+	sources.set('a.md', sources.get('a.md')! + 'later user edit');
+	await harness.recoverTriggers(app, store, custom, () => Promise.reject(new Error('must not change committed settings')));
+	assert.ok(sources.get('a.md')!.endsWith('later user edit'));
+	assert.equal(await store.read(), null);
+});
+
+test('concurrent edits are not overwritten during rollback and pending recovery survives restart', async () => {
+	const { app, sources } = appFor();
+	const { store } = migrationStore();
+	const process = app.vault.process.bind(app.vault);
+	let fail = true;
+	app.vault.process = (file, transform) => {
+		if (file.path === 'b.md' && fail) {
+			fail = false; sources.set('a.md', sources.get('a.md')! + 'concurrent edit');
+			return Promise.reject(new Error('write failed'));
+		}
+		return process(file, transform);
+	};
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, () => Promise.resolve()), /remains paused/);
+	assert.ok(sources.get('a.md')!.endsWith('concurrent edit'));
+	assert.ok(await store.read());
+	await assert.rejects(harness.migrateTriggers(app, DEFAULT_MARKERS, custom, store, () => Promise.resolve()), /Recover the unfinished/);
+	await assert.rejects(harness.recoverTriggers(app, store, DEFAULT_MARKERS, () => Promise.resolve()), /left edited/);
+	// Simulate a user restoring the conflicted file from the durable snapshot, then retry.
+	sources.set('a.md', note);
+	await harness.recoverTriggers(app, store, DEFAULT_MARKERS, () => Promise.resolve());
+	assert.equal(sources.get('a.md'), note); assert.equal(await store.read(), null);
+});
+
+test('durable journal round-trips, validates data, archives without overwriting backups, and retains no active journal', async () => {
+	const files = new Map<string, string>();
+	const directories = new Set<string>();
+	const app = { vault: { configDir: 'custom-config', adapter: {
+		exists: (path: string) => Promise.resolve(files.has(path) || directories.has(path)),
+		read: (path: string) => Promise.resolve(files.get(path)!),
+		write: (path: string, text: string) => { files.set(path, text); return Promise.resolve(); },
+		mkdir: (path: string) => { directories.add(path); return Promise.resolve(); },
+		rename: (from: string, to: string) => { assert.ok(!files.has(to)); files.set(to, files.get(from)!); files.delete(from); return Promise.resolve(); },
+	} } } as unknown as App;
+	const store = new harness.VaultTriggerJournal(app, 'anki-card-manager');
+	assert.equal(await store.read(), null);
+	const journal: TriggerJournal = { version: 1, phase: 'prepared', previous: { ...DEFAULT_MARKERS }, next: custom, files: [{ path: 'a.md', before: note, after: replaceTriggers(note, DEFAULT_MARKERS, custom) }] };
+	await store.write(journal);
+	assert.equal((await store.read())!.files[0]!.before, note);
+	const first = await store.archive('applied');
+	assert.ok(first.startsWith('custom-config/plugins/anki-card-manager/trigger-backups/'));
+	await store.write(journal); const second = await store.archive('restored');
+	assert.notEqual(first, second); assert.equal(files.size, 2);
+	files.set(store.path, '{broken');
+	await assert.rejects(store.read());
+});
+
+test('manager rescans custom triggers and suspends row actions until migration recovery finishes', async () => {
+	const { app } = appFor(new Map([['a.md', replaceTriggers(note, DEFAULT_MARKERS, custom)]]));
+	const container = dom.window.document.body.createDiv();
+	const leaf = new harness.WorkspaceLeaf(app, container) as unknown as WorkspaceLeaf;
+	let markers = custom; let paused = false;
+	const view = new harness.AnkiManagerView(leaf, () => markers, () => paused);
+	try {
+		await view.onOpen();
+		assert.equal(container.querySelectorAll('tbody tr').length, 2);
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click();
+		paused = true; await view.refresh();
+		assert.equal(container.querySelectorAll('tbody tr').length, 0);
+		assert.equal(button(container, 'Delete').disabled, true);
+		assert.ok(container.textContent?.includes('Trigger migration is pending'));
+		paused = false; await view.refresh();
+		assert.equal(container.querySelectorAll('tbody tr').length, 2);
+		assert.ok(container.textContent?.includes('0 selected'));
+		markers = { ...DEFAULT_MARKERS }; await view.refresh();
+		assert.equal(container.querySelectorAll('tbody tr').length, 0);
+	} finally { await view.onClose(); container.remove(); }
+});
+
+test('trigger settings stay draft until Apply; closing discards drafts and default type has only two choices', async () => {
+	const { app } = appFor();
+	let applied = 0; let saves = 0;
+	const plugin = { settings: { ...harness.DEFAULT_SETTINGS, markers: { ...DEFAULT_MARKERS } }, migrationBlocked: false, migrationBusy: false,
+		saveSettings: () => { saves += 1; return Promise.resolve(); }, refreshEditorDecorations: () => {},
+		applyTriggers: (markers: CardMarkers) => { applied += 1; plugin.settings.markers = { ...markers }; return Promise.resolve(); },
+	} as unknown as AnkiCardManagerPlugin;
+	const tab = new harness.AnkiCardManagerSettingTab(app, plugin);
+	dom.window.document.body.append(tab.containerEl); tab.display();
+	const choices = tab.containerEl.querySelector<HTMLSelectElement>('select[aria-label="Card type"]')!;
+	assert.deepEqual([...choices.options].map((option) => option.value), ['Obsidian-Basic', 'Cloze']);
+	const draft = tab.containerEl.querySelector<HTMLInputElement>('input[aria-label="Registered card start"]')!;
+	draft.value = '[MY_START]'; draft.dispatchEvent(inputEvent());
+	assert.equal(plugin.settings.markers.registeredStart, DEFAULT_MARKERS.registeredStart);
+	assert.equal(applied, 0); assert.equal(saves, 0);
+	tab.display();
+	const restored = tab.containerEl.querySelector<HTMLInputElement>('input[aria-label="Registered card start"]')!;
+	assert.equal(restored.value, DEFAULT_MARKERS.registeredStart);
+	restored.value = '[MY_START]'; restored.dispatchEvent(inputEvent());
+	button(tab.containerEl, '저장 및 전체 Vault에 적용').click();
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	assert.equal(applied, 1); assert.equal(plugin.settings.markers.registeredStart, '[MY_START]');
+	assert.equal(saves, 0, 'draft does not use ordinary immediate settings persistence');
+	tab.containerEl.remove();
 });

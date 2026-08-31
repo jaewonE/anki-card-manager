@@ -3,8 +3,10 @@ import type { App } from 'obsidian';
 import type { AnkiCard } from './types';
 import { renderAnkiIcon } from './ankiIcon';
 import { renderClozeAnswer } from './clozeRenderer';
+import { renderCardControls } from './cardControls';
+import type { CardControlActions } from './cardControls';
 
-export interface CardRenderOptions {
+export interface CardRenderOptions extends CardControlActions {
 	compact?: boolean;
 	showSource?: boolean;
 	truncateTitle?: boolean;
@@ -30,7 +32,7 @@ export function renderAnkiCard(
 		cls: 'anki-card-manager-summary',
 	});
 	const icon = summary.createSpan({ cls: 'anki-card-manager-summary-icon' });
-	renderAnkiIcon(icon, card.registered);
+	renderAnkiIcon(icon, card.registered, card.cardType);
 
 	const question = summary.createDiv({ cls: 'anki-card-manager-question' });
 	const questionRender = MarkdownRenderer.render(
@@ -56,7 +58,7 @@ export function renderAnkiCard(
 
 	const answer = details.createDiv({ cls: 'anki-card-manager-answer' });
 	const answerHeader = answer.createDiv({ cls: 'anki-card-manager-answer-header' });
-	answerHeader.createSpan({ cls: 'anki-card-manager-badge', text: card.cardType || 'Unknown type' });
+	renderCardControls(answerHeader, card, component, options);
 	const answerContent = answer.createDiv({
 		cls: 'anki-card-manager-answer-content',
 	});

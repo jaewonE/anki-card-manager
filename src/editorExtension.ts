@@ -17,12 +17,16 @@ import { parseAnkiCards } from './parser';
 import { groupAdjacentCards } from './cardGrouping';
 import { protectCardDeletion } from './editorDeletion';
 import type { AnkiCard, CardPlacement } from './types';
+import { DEFAULT_MARKERS, sameMarkers } from './markers';
+import type { CardMarkers } from './markers';
 
 interface AnkiDecorationState {
 	decorations: DecorationSet;
 	editorFocused: boolean;
 	placement: CardPlacement;
 	truncateTitles: boolean;
+	markers: CardMarkers;
+	blocked: boolean;
 }
 
 function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
@@ -39,9 +43,10 @@ function buildDecorations(
 	placement: CardPlacement,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
+	markers: CardMarkers,
 ): DecorationSet {
 	const sourcePath = state.field(editorInfoField, false)?.file?.path ?? '';
-	const cards = parseAnkiCards(state.doc.toString(), sourcePath);
+	const cards = parseAnkiCards(state.doc.toString(), sourcePath, undefined, markers);
 	const ranges = [];
 
 	const visibleCards = cards.filter((card) => renderFocusedCard || !selectionTouchesCard(state, card));
@@ -81,9 +86,10 @@ function safeBuildDecorations(
 	placement: CardPlacement,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
+	markers: CardMarkers,
 ): DecorationSet {
 	try {
-		return buildDecorations(state, app, placement, renderFocusedCard, truncateTitles);
+		return buildDecorations(state, app, placement, renderFocusedCard, truncateTitles, markers);
 	} catch (error) {
 		console.error('Anki Card Manager: card rendering was disabled for this editor', error);
 		return Decoration.none;
@@ -102,17 +108,22 @@ export function createAnkiCardEditorExtension(
 	app: App,
 	getPlacement: () => CardPlacement,
 	getTruncateTitles: () => boolean = () => false,
+	getMarkers: () => CardMarkers = () => DEFAULT_MARKERS,
+	isBlocked: () => boolean = () => false,
 ): Extension {
 	const focusEffect = StateEffect.define<boolean>();
 	const decorationField = StateField.define<AnkiDecorationState>({
 		create(state) {
 			const placement = getPlacement();
 			const truncateTitles = getTruncateTitles();
+			const markers = { ...getMarkers() };
+			const blocked = isBlocked();
 			return {
-				decorations: safeBuildDecorations(state, app, placement, false, truncateTitles),
+				decorations: blocked ? Decoration.none : safeBuildDecorations(state, app, placement, false, truncateTitles, markers),
 				editorFocused: true,
 				placement,
 				truncateTitles,
+				markers, blocked,
 			};
 		},
 		update(value, transaction) {
@@ -122,6 +133,8 @@ export function createAnkiCardEditorExtension(
 			}
 			const placement = getPlacement();
 			const truncateTitles = getTruncateTitles();
+			const markers = { ...getMarkers() };
+			const blocked = isBlocked();
 			const selectionChanged = !transaction.startState.selection.eq(
 				transaction.state.selection,
 			);
@@ -129,21 +142,24 @@ export function createAnkiCardEditorExtension(
 				!transaction.docChanged &&
 				!selectionChanged &&
 				editorFocused === value.editorFocused &&
-				placement === value.placement && truncateTitles === value.truncateTitles
+				placement === value.placement && truncateTitles === value.truncateTitles &&
+				blocked === value.blocked && sameMarkers(markers, value.markers)
 			) {
 				return value;
 			}
 			return {
-				decorations: safeBuildDecorations(
+				decorations: blocked ? Decoration.none : safeBuildDecorations(
 					transaction.state,
 					app,
 					placement,
 					!editorFocused,
 					truncateTitles,
+					markers,
 				),
 				editorFocused,
 				placement,
 				truncateTitles,
+				markers, blocked,
 			};
 		},
 		provide(field) {
@@ -197,5 +213,5 @@ export function createAnkiCardEditorExtension(
 	});
 
 	return [decorationField, focusWatcher,
-		protectCardDeletion((state) => state.field(decorationField).decorations, focusEffect, getPlacement)];
+		protectCardDeletion((state) => state.field(decorationField).decorations, focusEffect, getPlacement, getMarkers)];
 }

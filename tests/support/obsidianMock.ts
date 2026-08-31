@@ -11,8 +11,10 @@ export const editorInfoField = StateField.define({
 
 export class Component {
 	static active = 0;
+	private cleanup: (() => void)[] = [];
 	load(): void { Component.active += 1; }
-	unload(): void { Component.active -= 1; }
+	register(callback: () => void): void { this.cleanup.push(callback); }
+	unload(): void { Component.active -= 1; for (const callback of this.cleanup.splice(0)) callback(); }
 }
 
 // Only Obsidian's host APIs are mocked. The extension, widgets, renderer,
@@ -76,7 +78,65 @@ export class Modal {
 	onClose(): void {}
 }
 export class ButtonComponent {}
-export class Setting {}
+class Control {
+	constructor(readonly element: HTMLInputElement | HTMLSelectElement | HTMLButtonElement) {}
+	setValue(value: string | boolean): this {
+		if (typeof value === 'boolean' && this.element instanceof this.element.ownerDocument.defaultView!.HTMLInputElement) this.element.checked = value;
+		else this.element.value = String(value);
+		return this;
+	}
+	addOption(value: string, text: string): this { this.element.createEl('option', { value, text }); return this; }
+	setDisabled(value: boolean): this { this.element.disabled = value; return this; }
+	onChange(callback: (value: string) => void): this {
+		this.element.addEventListener(this.element.tagName === 'SELECT' ? 'change' : 'input', () => callback(this.element.value)); return this;
+	}
+	setButtonText(text: string): this { this.element.textContent = text; return this; }
+	setCta(): this { return this; }
+	onClick(callback: () => void): this { this.element.addEventListener('click', callback); return this; }
+}
+export class Setting {
+	private row: HTMLElement;
+	private name: HTMLElement;
+	constructor(container: HTMLElement) { this.row = container.createDiv({ cls: 'setting-item' }); this.name = this.row.createEl('label'); }
+	setName(text: string): this { this.name.textContent = text; return this; }
+	setDesc(text: string): this { this.row.createEl('p', { text }); return this; }
+	setHeading(): this { return this; }
+	private control(tag: 'input' | 'select' | 'button', callback: (control: Control) => void): this {
+		const element = this.row.createEl(tag); element.setAttribute('aria-label', this.name.textContent ?? ''); callback(new Control(element)); return this;
+	}
+	addDropdown(callback: (control: Control) => void): this { return this.control('select', callback); }
+	addText(callback: (control: Control) => void): this { return this.control('input', callback); }
+	addToggle(callback: (control: Control) => void): this { return this.control('input', callback); }
+	addButton(callback: (control: Control) => void): this { return this.control('button', callback); }
+}
+export class PluginSettingTab {
+	containerEl = document.createElement('div');
+	constructor(public app: unknown, public plugin: unknown) {}
+}
+export class Menu {
+	static last: Menu | undefined;
+	items: { title: string; callback: () => void }[] = [];
+	private element?: HTMLElement;
+	constructor() { Menu.last = this; }
+	addItem(callback: (item: { setTitle(title: string): unknown }) => void): this {
+		const record = { title: '', callback: () => {} };
+		const item = { setTitle: (title: string) => { record.title = title; return item; }, setChecked: () => item,
+			onClick: (fn: () => void) => { record.callback = fn; return item; } };
+		callback(item); this.items.push(record); return this;
+	}
+	showAtMouseEvent(event: MouseEvent): this { return this.showAtPosition({ x: event.clientX, y: event.clientY }); }
+	showAtPosition(position: { x: number; y: number }): this {
+		this.element = document.body.createDiv({ cls: 'menu', attr: { role: 'menu' } });
+		this.element.style.left = `${position.x}px`; this.element.style.top = `${position.y}px`;
+		for (const item of this.items) {
+			const button = this.element.createEl('button', { text: item.title, attr: { role: 'menuitem' } });
+			button.addEventListener('click', () => { this.hide(); item.callback(); });
+		}
+		return this;
+	}
+	hide(): this { this.element?.remove(); return this; }
+}
+export function normalizePath(path: string): string { return path.replace(/\/+/g, '/'); }
 export function debounce(callback: () => void, delay: number) {
 	let timer: ReturnType<typeof setTimeout>;
 	return () => { clearTimeout(timer); timer = setTimeout(callback, delay); };

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4
+
+- Limit single-line ellipsis to collapsed cards and show full questions when expanded. Halve all-edge shadows, add side gutters, and remove pencil-button shadows.
+- Add native floating Basic/Cloze menus, safe Cloze-to-Basic unwrapping (single/double colons), and color-matched registration toggles using live editor transactions. Keep the updated card expanded.
+- Centralize type/separator/icon definitions; use blank icons for Cloze and Anki-style icons for other types. Offer a Basic/Cloze dropdown for new-card defaults.
+- Add four draft trigger settings with explicit Save and apply to the entire vault. Simultaneously replace literal occurrences throughout Markdown and use saved triggers across rendering, completion, card actions, deletion protection and manager scans.
+- Verify a durable source backup before migration, reject stale writes, restore unchanged files on failure, and pause automation until interrupted migrations are recovered. Retain private backups inside the Vault; leave external obsidian-to-anki configuration unchanged.
+- Expand two-version CodeMirror, manager, settings and migration regression coverage, verify light/dark browser layouts, and document controls, migration scope and recovery in English and Korean. Retain Obsidian 1.5.0 compatibility.
+
 ## 0.1.3
 
 - Group cards by the file's single `anki_deck` using `::` hierarchy; keep multi-value tags flat and optionally group them within each deck.

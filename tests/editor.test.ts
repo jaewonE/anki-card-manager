@@ -9,6 +9,8 @@ import { JSDOM } from 'jsdom';
 import type { App, MarkdownFileInfo } from 'obsidian';
 import { parseAnkiCards } from '../src/parser';
 import type { CardPlacement } from '../src/types';
+import { DEFAULT_MARKERS } from '../src/markers';
+import type { CardMarkers } from '../src/markers';
 import { textEditor } from './support/textEditor';
 
 const require = createRequire(import.meta.url);
@@ -49,9 +51,11 @@ for (const [version, packageName] of [
 		let view: EditorViewType | undefined;
 		let placement: CardPlacement;
 		let truncateTitles: boolean;
+		let markers: CardMarkers;
+		let blocked: boolean;
 		let errors: unknown[];
 		let outside: HTMLButtonElement;
-		beforeEach(() => { errors = []; placement = 'inline'; truncateTitles = false; });
+		beforeEach(() => { errors = []; placement = 'inline'; truncateTitles = false; markers = { ...DEFAULT_MARKERS }; blocked = false; });
 
 		before(async () => {
 			dom = new JSDOM('<!doctype html><body><button>Outside</button></body>', {
@@ -92,6 +96,7 @@ for (const [version, packageName] of [
 					name === '@codemirror/state' ? stateModule : require(name),
 				createDiv: (options: DomElementInfo) => createElement(win.document, 'div', options),
 				queueMicrotask,
+				document: win.document,
 				console: { error: (...args: unknown[]) => errors.push(args) },
 			});
 			harness = bundled.exports;
@@ -108,7 +113,7 @@ for (const [version, packageName] of [
 					selection: { anchor },
 					extensions: [
 						harness.editorInfoField,
-						harness.createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles),
+						harness.createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles, () => markers, () => blocked),
 						cm.EditorView.exceptionSink.of((error) => errors.push(error)),
 					],
 				}),
@@ -124,6 +129,52 @@ for (const [version, packageName] of [
 			assert.deepEqual(errors, [], 'no editor, layout, async render or focus errors');
 		});
 		after(() => dom.window.close());
+
+		test('type menu converts Cloze text and status toggles through live editor transactions, keeping the card open', async () => {
+			const source = 'intro\n<START_ANKI>\nCloze\nQuestion\nText:\n{{c1::**answer**}} {{c2:other}}\n<!--ID: 123-->\n<END_ANKI>\ntail';
+			const editor = open(source, 0);
+			await settle();
+			editor.dom.querySelector('details')!.open = true;
+			editor.dom.querySelector<HTMLButtonElement>('.anki-card-manager-type-selector')!.click();
+			assert.deepEqual(Array.from(harness.Menu.last!.items, (item) => item.title), ['Obsidian-Basic', 'Cloze']);
+			harness.Menu.last!.items[0]!.callback();
+			await settle();
+			let parsed = parseAnkiCards(editor.state.doc.toString())[0]!;
+			assert.equal(parsed.cardType, 'Obsidian-Basic');
+			assert.equal(parsed.back, '**answer** other');
+			assert.equal(parsed.id, '123');
+			assert.equal(editor.dom.querySelector('details')!.open, true);
+			assert.equal(editor.dom.querySelector('[data-card-icon]')?.getAttribute('data-card-icon'), 'anki');
+			editor.dom.querySelector<HTMLButtonElement>('.anki-card-manager-registration-toggle')!.click();
+			await settle();
+			parsed = parseAnkiCards(editor.state.doc.toString())[0]!;
+			assert.equal(parsed.registered, false);
+			assert.equal(parsed.id, undefined);
+			assert.equal(editor.dom.querySelector('details')!.open, true);
+			assert.equal(editor.dom.querySelector('.anki-card-manager-registration-toggle')?.textContent, 'Unregistered');
+			assert.ok(editor.state.doc.toString().startsWith('intro\n'));
+			assert.ok(editor.state.doc.toString().endsWith('\ntail'));
+		});
+
+		test('custom triggers refresh render/deletion protection and block safely during migration', async () => {
+			markers = { registeredStart: '[RS]', registeredEnd: '[RE]', unregisteredStart: '[US]', unregisteredEnd: '[UE]' };
+			const source = 'intro\n[RS]\nCloze\nQ\nText:\n{{c1::A}}\n[RE]\ntail';
+			const editor = open(source, source.indexOf('tail'));
+			editor.focus();
+			await settle();
+			assert.equal(editor.dom.querySelectorAll('details').length, 1);
+			editor.contentDOM.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
+			assert.equal(editor.state.doc.toString(), source);
+			assert.ok(editor.state.selection.main.head < source.indexOf('tail'));
+			outside.focus();
+			await settle();
+			blocked = true; editor.dispatch({});
+			assert.equal(editor.dom.querySelectorAll('details').length, 0);
+			blocked = false; editor.dispatch({});
+			assert.equal(editor.dom.querySelectorAll('details').length, 1);
+			markers = { ...DEFAULT_MARKERS }; editor.dispatch({});
+			assert.equal(editor.dom.querySelectorAll('details').length, 0);
+		});
 
 		test('groups consecutive cards, keeps prose separate and refreshes title truncation', async () => {
 			const source = `intro\n${card}\n\n${card}\nprose\n${card}`;
@@ -147,7 +198,7 @@ for (const [version, packageName] of [
 			await settle();
 			const details = editor.dom.querySelector('details')!;
 			assert.ok(details.classList.contains('is-unregistered'));
-			assert.equal(details.querySelector('svg')?.getAttribute('aria-label'), 'Anki: unregistered');
+			assert.equal(details.querySelector('svg')?.getAttribute('aria-label'), 'Cloze: unregistered');
 			details.open = true;
 			await settle();
 			const masks = Array.from(details.querySelectorAll<HTMLElement>('.anki-card-manager-cloze-mask'));
@@ -233,7 +284,7 @@ for (const [version, packageName] of [
 
 		test('autocomplete skips complete cards on typing or Enter and inserts before a nested start', async () => {
 			const settings = { autoCompleteCards: true, cardPlacement: 'inline' as const, truncateTitles: false,
-				defaultCardType: 'Cloze', defaultDeck: 'Inbox', defaultTag: 'Inbox' };
+				defaultCardType: 'Cloze', defaultDeck: 'Inbox', defaultTag: 'Inbox', markers: { ...DEFAULT_MARKERS } };
 			const completer = new harness.AnkiCardAutoCompleter({} as App, () => settings);
 			const info = { file: null } as MarkdownFileInfo;
 			for (const cursor of [{ line: 0, ch: 12 }, { line: 1, ch: 0 }]) {
@@ -250,6 +301,31 @@ for (const [version, packageName] of [
 			const disabled = textEditor('<START_ANKI>', { line: 0, ch: 12 });
 			await completer.onEditorChange(disabled.editor, info);
 			assert.equal(disabled.text(), '<START_ANKI>');
+		});
+
+		test('autocomplete and insert command honor custom triggers and pause during migration', async () => {
+			const custom = { registeredStart: '[ON.*]', registeredEnd: '[/ON.*]', unregisteredStart: '[OFF$]', unregisteredEnd: '[/OFF$]' };
+			const settings = { autoCompleteCards: true, cardPlacement: 'inline' as const, truncateTitles: false,
+				defaultCardType: 'Cloze', defaultDeck: 'Inbox', defaultTag: 'Inbox', markers: custom };
+			let paused = false;
+			const completer = new harness.AnkiCardAutoCompleter({} as App, () => settings, () => paused);
+			const info = { file: null } as MarkdownFileInfo;
+			const complete = '[ON.*]\nCloze\nQ\nText:\nA\n[/ON.*]';
+			const existing = textEditor(complete, { line: 0, ch: custom.registeredStart.length });
+			await completer.onEditorChange(existing.editor, info);
+			assert.equal(existing.text(), complete);
+			const nested = textEditor('[ON.*]\n\n[ON.*]Other[/ON.*]', { line: 1, ch: 0 });
+			await completer.onEditorChange(nested.editor, info);
+			assert.ok(nested.text().startsWith('[ON.*]\nCloze\n\nText:\n\n[/ON.*]'));
+			assert.ok(nested.text().endsWith('[ON.*]Other[/ON.*]'));
+			const inserted = textEditor('', { line: 0, ch: 0 });
+			await completer.insertAtCursor(inserted.editor, info);
+			assert.equal(inserted.text(), '[ON.*]\nCloze\n\nText:\n\n[/ON.*]');
+			paused = true;
+			const blocked = textEditor('[ON.*]', { line: 0, ch: custom.registeredStart.length });
+			await completer.onEditorChange(blocked.editor, info);
+			await completer.insertAtCursor(blocked.editor, info);
+			assert.equal(blocked.text(), '[ON.*]');
 		});
 
 		test('manager updates and registration toggles preserve Cloze Text and tokens', async () => {

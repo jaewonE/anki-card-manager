@@ -1,13 +1,13 @@
 :root {
 	--anki-card-manager-accent: var(--color-yellow);
-	--anki-card-manager-halo: 0 0 8px 1px rgb(0 0 0 / 15%);
+	--anki-card-manager-halo: 0 0 4px 0.5px rgb(0 0 0 / 15%);
 	--anki-card-manager-registered: #2978cf;
 	--anki-card-manager-unregistered: #c93e4e;
 	--anki-card-manager-mask: #dbe8f5;
 }
 
 .theme-dark {
-	--anki-card-manager-halo: 0 0 8px 1px rgb(255 255 255 / 20%);
+	--anki-card-manager-halo: 0 0 4px 0.5px rgb(255 255 255 / 20%);
 	--anki-card-manager-registered: #79baff;
 	--anki-card-manager-unregistered: #ff8995;
 	--anki-card-manager-mask: #3c526b;
@@ -16,7 +16,8 @@
 .anki-card-manager-editor-widget {
 	display: block;
 	white-space: normal;
-	padding: var(--size-4-3) 0;
+	padding: var(--size-4-3) 6px;
+	box-sizing: border-box;
 	width: 100%;
 }
 
@@ -98,7 +99,10 @@
 	grid-column: 4;
 }
 
-.anki-card-manager-edit-source {
+.anki-card-manager-card .anki-card-manager-edit-source,
+.anki-card-manager-card .anki-card-manager-edit-source:hover,
+.anki-card-manager-card .anki-card-manager-edit-source:focus,
+.anki-card-manager-card .anki-card-manager-edit-source:active {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -109,7 +113,7 @@
 	border-radius: 50%;
 	background: var(--background-modifier-hover, #e8e8e8);
 	color: var(--text-muted);
-	box-shadow: none;
+	box-shadow: none !important;
 }
 
 .anki-card-manager-edit-source svg,
@@ -144,22 +148,22 @@
 	overflow-wrap: anywhere;
 }
 
-.is-title-truncated .anki-card-manager-question {
+.is-title-truncated:not([open]) .anki-card-manager-question {
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
 
-.is-title-truncated .anki-card-manager-question * {
+.is-title-truncated:not([open]) .anki-card-manager-question * {
 	display: inline;
 	white-space: nowrap;
 }
 
-.is-title-truncated .anki-card-manager-question br {
+.is-title-truncated:not([open]) .anki-card-manager-question br {
 	display: none;
 }
 
-.is-title-truncated .anki-card-manager-question p + p::before {
+.is-title-truncated:not([open]) .anki-card-manager-question p + p::before {
 	content: " ";
 }
 
@@ -211,6 +215,36 @@
 	color: var(--text-muted);
 	font-size: var(--font-ui-smaller);
 	margin-bottom: var(--size-4-2);
+}
+
+.anki-card-manager-card .anki-card-manager-type-selector,
+.anki-card-manager-card .anki-card-manager-registration-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: auto;
+	font-size: var(--font-ui-smaller);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	padding: 2px 8px;
+	box-shadow: none;
+}
+
+.anki-card-manager-registration-toggle {
+	color: var(--anki-card-manager-registered);
+	background: color-mix(in srgb, var(--anki-card-manager-registered) 12%, var(--background-primary));
+}
+
+.is-unregistered .anki-card-manager-registration-toggle {
+	color: var(--anki-card-manager-unregistered);
+	background: color-mix(in srgb, var(--anki-card-manager-unregistered) 12%, var(--background-primary));
+}
+
+.anki-card-manager-type-selector:focus-visible,
+.anki-card-manager-registration-toggle:focus-visible,
+.anki-card-manager-edit-source:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
 }
 
 .anki-card-manager-cloze-toggle {

@@ -36,7 +36,7 @@ export function transformBulkSource(source: string, selected: readonly AnkiCard[
 	validateBulkAction(action);
 	const targets = uniqueCards(selected);
 	if (!targets.length) return source;
-	const current = parseAnkiCards(source, targets[0]!.sourcePath, cardMetadataFromSource(source));
+	const current = parseAnkiCards(source, targets[0]!.sourcePath, cardMetadataFromSource(source), targets[0]!.markers);
 	// Reject changed card inventories, including identical cards removed or added after selection.
 	if (current.length !== fileSnapshot.length || current.some((card, index) => card.raw !== fileSnapshot[index]?.raw)) {
 		throw new CardConflictError();
@@ -78,7 +78,7 @@ export function transformBulkSource(source: string, selected: readonly AnkiCard[
 		const from = action.kind === 'delete' ? card.renderFrom : card.from;
 		const to = action.kind === 'delete' ? card.renderTo : card.to;
 		const replacement = action.kind === 'delete' ? '' : action.kind === 'register'
-			? registerCardRaw(card.raw) : unregisterCardRaw(card.raw);
+			? registerCardRaw(card.raw, card.markers) : unregisterCardRaw(card.raw, card.markers);
 		result = result.slice(0, from) + replacement + result.slice(to);
 	}
 	return result;

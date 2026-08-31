@@ -32,6 +32,7 @@ const html = `<!doctype html><html lang="ko"><meta charset="utf-8"><title>Anki e
 body {font-family:system-ui;max-width:900px;margin:32px auto;padding:0 24px;color:#222;background:#fafafa;}
 body.theme-dark {color:#ddd;background:#202226;--text-normal:#ddd;--text-muted:#b5b7bf;--background-primary:#24262b;--background-secondary:#292c31;--background-modifier-border:#494d56;--background-modifier-hover:#383c42;}
 nav {display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px} button,select{padding:6px 10px}
+.menu{position:fixed;z-index:100;background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:6px;padding:4px;box-shadow:0 2px 8px #0003}.menu button{display:block;width:100%;text-align:left;color:var(--text-normal);background:transparent;border:0}.menu button:hover{background:var(--background-modifier-hover)}
 output {display:block;margin:12px 0;color:#555;font-size:13px}
 #editor {border:1px solid var(--background-modifier-border);background:var(--background-primary);} .cm-content {padding:20px;font-size:16px;line-height:1.7;font-family:system-ui;}
 ${stylesheet}
