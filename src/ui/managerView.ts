@@ -110,7 +110,7 @@ export class AnkiManagerView extends ItemView {
 		const controls = container.createDiv({ cls: 'anki-card-manager-controls' });
 		controls.createSpan({ cls: 'anki-card-manager-control-label', text: 'Search/Filter' });
 		this.search = controls.createEl('input', { type: 'search',
-			placeholder: 'Search · tag:t1,t2 · deck:Mother::Child · type:Cloze', attr: { 'aria-label': 'Search cards' } });
+			placeholder: 'Search · tag:t1,t2 · -tag:skip · deck:Mother::Child · type:Cloze', attr: { 'aria-label': 'Search cards' } });
 		this.search.addEventListener('input', () => { this.query = this.search.value; this.renderResults(); });
 		this.searchModeButton = controls.createEl('button', { cls: 'anki-card-manager-search-mode', attr: { type: 'button' } });
 		this.updateSearchMode();
@@ -167,7 +167,7 @@ export class AnkiManagerView extends ItemView {
 		this.searchModeButton.setText(this.searchMode.toUpperCase());
 		this.searchModeButton.dataset.mode = this.searchMode;
 		this.searchModeButton.setAttribute('aria-label', `Search condition mode: ${this.searchMode.toUpperCase()}`);
-		this.searchModeButton.title = 'Combine all search terms, including comma-separated values. Status and card-type filters always narrow the results.';
+		this.searchModeButton.title = 'Combine included search terms, including comma-separated values. Exclusions (-property:value), status and card-type filters always narrow the results.';
 	}
 
 	private updateGroupButtons(): void {

@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.3**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.4**.
 
 ## Features
 
@@ -22,7 +22,7 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Edits or deletes the exact source block and opens the source note at the card location.
 - Toggles registration without contacting Anki. Unregistering removes standalone `<!--ID: ... -->` lines and changes the markers to `<ANKI_START>` / `<ANKI_END>`; registering changes the markers back.
 - Separates Type and Deck columns; groups decks by `::` hierarchy, with optional flat tag groups inside each deck.
-- Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches, comma lists such as `tag:t1,t2`, and a color-coded AND/OR button for all search conditions (default AND).
+- Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches, comma lists such as `tag:t1,t2`, exclusions such as `-tag:t1,t2`, and a color-coded AND/OR button for included search conditions (default AND).
 - Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
 - Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
@@ -105,7 +105,7 @@ The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type fi
 
 ### Search syntax
 
-Search is case-insensitive and ignores whitespace differences within values. Field searches use substring matching (except `status`, which matches `registered` or `unregistered` exactly). The button immediately right of search combines **all** conditions using AND (default, every condition) or OR (any condition), including comma-separated values and separately listed properties/free words:
+Search is case-insensitive and ignores whitespace differences within values. Field searches use substring matching (except `status`, which matches `registered` or `unregistered` exactly). The button immediately right of search combines **included** conditions using AND (default, every condition) or OR (any condition), including comma-separated values and separately listed properties/free words. Exclusions always narrow the result in either mode:
 
 ```text
 tags:Inbox
@@ -113,9 +113,13 @@ tag:Inbox,Math
 TAGS : in box
 deck:Mother::Child type:Cloze
 tags:"Study notes" path:software
+-tag:t1,t2
+deck:Mother::Child -type:Cloze -path:Archive
 ```
 
 Supported fields: `deck` / `anki_deck`, `tags` / `tag` / `anki_tags`, `type`, `front` / `question`, `back` / `answer`, `path` / `source`, `status`, and `id`. Deck/tag/type values split on commas (names cannot contain commas). `tag:t1,t2` is equivalent to `tag:t1 tag:t2` in either mode; OR also applies across different properties, not just a single list. A property value extends until the next property; quotes protect text that looks like a property. Free words before the first property search across question, answer, type, deck, tags, path, and ID using the same mode. Empty input shows all cards permitted by the status/type dropdown filters, which always narrow search results. Reset returns the mode to AND.
+
+Put `-` immediately before any supported property to exclude its matches. `-tag:t1,t2` is equivalent to `-tag:t1 -tag:t2`: cards matching **either** tag value are removed, including in OR mode. Multiple exclusions always apply together; a positive OR match cannot bring an excluded card back. With only exclusions, all otherwise eligible cards remain except those matching an exclusion. Exclusions retain the same case/whitespace/substring rules and comma support as their positive forms. Empty values are ignored while typing. Quoted property-like text stays literal (for example, `front:"literal -tag:t1"`); `-word` without a supported property is plain text, not an exclusion. Searching changes neither card source nor registration.
 
 ### Bulk changes and file-level YAML
 

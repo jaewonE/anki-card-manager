@@ -1,18 +1,19 @@
 import type { AnkiCard } from './types';
 
-const PROPERTIES = /^(anki_deck|anki_tags|deck|tags?|type|front|question|back|answer|path|source|status|id)\s*:\s*/i;
-interface SearchTerm { property: string; value: string }
+const PROPERTIES = /^(-?)(anki_deck|anki_tags|deck|tags?|type|front|question|back|answer|path|source|status|id)\s*:\s*/i;
+interface SearchTerm { property: string; value: string; exclude?: boolean }
 export type SearchMode = 'and' | 'or';
 const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, '');
 
 export function parseSearch(query: string): SearchTerm[] {
 	const terms: SearchTerm[] = [];
 	let property = '';
+	let exclude = false;
 	let value = '';
 	let quote = '';
 	const flush = (): void => {
 		const values = /^(anki_deck|anki_tags|deck|tags?|type)$/.test(property) ? value.split(',') : [value];
-		for (const item of values) if (item.trim()) terms.push({ property, value: item.trim() });
+		for (const item of values) if (item.trim()) terms.push({ property, value: item.trim(), ...(exclude ? { exclude: true } : {}) });
 		value = '';
 	};
 	for (let index = 0; index < query.length;) {
@@ -28,7 +29,8 @@ export function parseSearch(query: string): SearchTerm[] {
 			? PROPERTIES.exec(query.slice(index)) : null;
 		if (match) {
 			flush();
-			property = match[1]!.toLowerCase();
+			property = match[2]!.toLowerCase();
+			exclude = match[1] === '-';
 			index += match[0].length;
 			continue;
 		}
@@ -58,5 +60,8 @@ export function matchesSearch(card: AnkiCard, terms: readonly SearchTerm[], mode
 		}
 		return haystacks.some((haystack) => normalize(haystack).includes(needle));
 	};
-	return mode === 'or' ? terms.some(matches) : terms.every(matches);
+	// Exclusions always narrow results, even when included terms are combined with OR.
+	if (terms.some((term) => term.exclude && matches(term))) return false;
+	const included = terms.filter((term) => !term.exclude);
+	return !included.length || (mode === 'or' ? included.some(matches) : included.every(matches));
 }

@@ -497,6 +497,52 @@ test('search mode button applies OR to comma and listed terms, stays beside sear
 	} finally { await close(); }
 });
 
+test('exclusion search narrows selection, OR, dropdown filters and grouping without writing notes', async () => {
+	const samples = new Map([
+		['one.md', yaml.replace('[Inbox, Study/UML]', '[t1]') + basic('One')],
+		['two.md', yaml.replace('[Inbox, Study/UML]', '[t2]') + basic('Two').replace('Obsidian-Basic', 'Cloze').replace('Back:', 'Text:')
+			.replace('<START_ANKI>', '<ANKI_START>').replace('<END_ANKI>', '<ANKI_END>')],
+		['both.md', yaml.replace('[Inbox, Study/UML]', '[t1, t2]') + basic('Both')],
+		['none.md', yaml.replace('[Inbox, Study/UML]', '[]') + basic('None')],
+	]);
+	const before = new Map(samples);
+	const { container, view, writes, close } = await openView(samples);
+	try {
+		const search = container.querySelector<HTMLInputElement>('input[type=search]')!;
+		const toggle = container.querySelector<HTMLButtonElement>('.anki-card-manager-search-mode')!;
+		const questions = () => [...container.querySelectorAll('.anki-card-manager-question-link')].map((el) => el.textContent);
+		const query = (text: string): void => {
+			search.focus(); search.value = text; search.setSelectionRange(text.length, text.length); search.dispatchEvent(inputEvent());
+			assert.equal(dom.window.document.activeElement, search);
+			assert.equal(search.selectionStart, text.length);
+		};
+		assert.match(search.placeholder, /-tag:/);
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click();
+		query('-tag:t1,t2');
+		assert.deepEqual(questions(), ['None']);
+		assert.ok(container.textContent?.includes('Change state | 1 selected'));
+		toggle.click(); assert.equal(toggle.textContent, 'OR'); assert.deepEqual(questions(), ['None']);
+		query('front:Both front:None -tag:t1'); assert.deepEqual(questions(), ['None']);
+		toggle.click(); assert.equal(toggle.textContent, 'AND'); assert.deepEqual(questions(), []);
+		toggle.click(); query('-tag:t1,t2');
+		const type = container.querySelector<HTMLSelectElement>('[aria-label="Filter card type"]')!;
+		type.value = 'Cloze'; type.dispatchEvent(changeEvent()); assert.deepEqual(questions(), []);
+		type.value = 'Obsidian-Basic'; type.dispatchEvent(changeEvent()); assert.deepEqual(questions(), ['None']);
+		const status = container.querySelector<HTMLSelectElement>('[aria-label="Filter registration status"]')!;
+		status.value = 'unregistered'; status.dispatchEvent(changeEvent()); assert.deepEqual(questions(), []);
+		status.value = 'registered'; status.dispatchEvent(changeEvent()); assert.deepEqual(questions(), ['None']);
+		button(container, 'Group by deck hierarchy').click(); button(container, 'Group by tag').click();
+		assert.deepEqual(questions(), ['None']);
+		assert.ok(container.textContent?.includes('1 of 4 cards'));
+		search.focus(); await view.refresh();
+		assert.equal(search.value, '-tag:t1,t2'); assert.equal(dom.window.document.activeElement, search);
+		assert.deepEqual(questions(), ['None']);
+		container.querySelector<HTMLButtonElement>('[data-icon="carbon--filter-reset"]')!.click();
+		assert.equal(search.value, ''); assert.equal(toggle.textContent, 'AND'); assert.equal(questions().length, 4);
+		assert.equal(writes.length, 0); assert.deepEqual(samples, before);
+	} finally { await close(); }
+});
+
 test('all groups synchronize an independent sampling mode and global Count 10 uses group shares 30/40/30', async () => {
 	const sample = new Map(['A', 'B', 'C'].map((tag) => [`${tag}.md`, yaml.replace('[Inbox, Study/UML]', `[${tag}]`) +
 		Array.from({ length: 10 }, (_, index) => basic(`${tag}${index}`)).join('')]));
@@ -574,10 +620,13 @@ test('typing and scan refresh preserve the search DOM, focus, caret and IME comp
 	const { view, container, close } = await openView();
 	const input = container.querySelector<HTMLInputElement>('input[type=search]')!;
 	input.focus();
-	for (const char of 'tags:Inbox') {
-		input.value += char; input.dispatchEvent(inputEvent());
-		assert.equal(dom.window.document.activeElement, input);
-		assert.equal(container.querySelector('input[type=search]'), input);
+	for (const query of ['tags:Inbox', '-tags:missing']) {
+		input.value = '';
+		for (const char of query) {
+			input.value += char; input.dispatchEvent(inputEvent());
+			assert.equal(dom.window.document.activeElement, input);
+			assert.equal(container.querySelector('input[type=search]'), input);
+		}
 	}
 	input.setSelectionRange(3, 5);
 	await view.refresh();

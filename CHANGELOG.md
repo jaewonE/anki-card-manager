@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+
+- Add `-property:value` exclusions for every supported search property and alias, including comma lists such as `-tag:t1,t2`.
+- Always remove cards matching any exclusion in both AND and OR modes; retain existing AND/OR behavior for included terms and support exclusion-only searches.
+- Preserve quoting, case/whitespace tolerance, field matching rules, search focus, selection safety and read-only search behavior.
+- Add parser and manager regressions and update search hints plus English/Korean usage documentation.
+
 ## 0.2.3
 
 - Remove the table-wide "Anki cards table" hover tooltip by using a referenced accessible label instead of Obsidian's tooltip-triggering aria-label attribute.

@@ -29,6 +29,81 @@ test('comma values and separately listed terms share the global AND/OR mode', ()
 	assert.deepEqual(parseSearch('front:Hello, world'), [{ property: 'front', value: 'Hello, world' }]);
 });
 
+test('property exclusion parses aliases, comma lists and positive/negative boundaries', () => {
+	assert.deepEqual(parseSearch('uml -TaGs : t1, t2 type:Cloze -anki_deck: Mother :: Child, Other -front:"literal -tag:t3"'), [
+		{ property: '', value: 'uml' },
+		{ property: 'tags', value: 't1', exclude: true }, { property: 'tags', value: 't2', exclude: true },
+		{ property: 'type', value: 'Cloze' },
+		{ property: 'anki_deck', value: 'Mother :: Child', exclude: true }, { property: 'anki_deck', value: 'Other', exclude: true },
+		{ property: 'front', value: 'literal -tag:t3', exclude: true },
+	]);
+	assert.deepEqual(parseSearch('-tags:t1 type:Cloze -tags:t2'), [
+		{ property: 'tags', value: 't1', exclude: true }, { property: 'type', value: 'Cloze' }, { property: 'tags', value: 't2', exclude: true },
+	]);
+});
+
+test('comma exclusions reject either tag in AND and OR, including exclusion-only searches', () => {
+	const cards = [card('none.md', 'Inbox', []), card('one.md', 'Inbox', ['t1']),
+		card('two.md', 'Inbox', ['t2']), card('both.md', 'Inbox', ['t1', 't2'])];
+	for (const mode of ['and', 'or'] as const) {
+		for (const query of ['-tag:t1,t2', '-tags:t1 -anki_tags:t2']) {
+			assert.deepEqual(cards.filter((item) => matchesSearch(item, parseSearch(query), mode)).map((item) => item.sourcePath), ['none.md']);
+		}
+		assert.equal(matchesSearch(cards[1]!, parseSearch('-tag: T 1 , missing'), mode), false);
+		assert.equal(matchesSearch(cards[0]!, parseSearch('-tag:missing'), mode), true);
+	}
+});
+
+test('exclusions override positive OR matches without changing positive AND/OR behavior', () => {
+	const query = parseSearch('deck:missing type:Cloze -tag:Study/UML');
+	assert.equal(matchesSearch(a, query, 'or'), false, 'a positive match cannot override an exclusion');
+	assert.equal(matchesSearch(b, query, 'or'), true);
+	assert.equal(matchesSearch(b, query, 'and'), false);
+	assert.equal(matchesSearch(c, parseSearch('missing -tag:Inbox'), 'or'), false, 'passing exclusion alone is not a positive OR match');
+	assert.equal(matchesSearch(a, parseSearch('-tag:Inbox tag:Inbox'), 'or'), false);
+	assert.equal(matchesSearch(b, parseSearch('uml -tag:Study/UML'), 'and'), true);
+	assert.equal(matchesSearch(a, parseSearch('uml -tag:Study/UML'), 'and'), false);
+});
+
+test('exclusions support every existing property alias and preserve status exact matching', () => {
+	const target = { ...a, id: 'AbC123' };
+	for (const query of ['deck:mother :: child', 'anki_deck:ＭＯＴＨＥＲ', 'tags:in box', 'tag:INBOX', 'anki_tags:Study/UML',
+		'type:Cloze', 'front:UML 구성', 'question:UML 구성', 'back:모델링 언어', 'answer:모델링 언어',
+		'path:A.MD', 'source:a.md', 'id:abc123', 'status:registered']) {
+		assert.equal(matchesSearch(target, parseSearch(query)), true, query);
+		for (const mode of ['and', 'or'] as const) assert.equal(matchesSearch(target, parseSearch(`-${query}`), mode), false, query);
+	}
+	assert.equal(matchesSearch(target, parseSearch('-status:unregistered')), true);
+	assert.equal(matchesSearch({ ...target, registered: false }, parseSearch('-status:registered')), true);
+	assert.equal(matchesSearch({ ...target, registered: false }, parseSearch('-status:unregistered')), false);
+	assert.equal(matchesSearch({ ...target, id: undefined }, parseSearch('-id:123')), true);
+	assert.equal(matchesSearch({ ...target, deck: '', tags: [] }, parseSearch('-deck:Inbox -tags:Inbox')), true);
+	assert.equal(matchesSearch(target, parseSearch('-type:Basic,Cloze')), false);
+	assert.equal(matchesSearch(target, parseSearch('-deck:Other,Mother::Child')), false);
+});
+
+test('quoted property text, unknown properties and literal hyphens do not become exclusions', () => {
+	assert.deepEqual(parseSearch('"-tag:t1" front:"literal -type:Cloze"'), [
+		{ property: '', value: '-tag:t1' }, { property: 'front', value: 'literal -type:Cloze' },
+	]);
+	for (const text of ['-word', '--tag:t1', '-unknown:t1', 'prefix-tag:t1']) {
+		assert.deepEqual(parseSearch(text), [{ property: '', value: text }]);
+	}
+	assert.deepEqual(parseSearch('tag:-t1'), [{ property: 'tag', value: '-t1' }]);
+	assert.deepEqual(parseSearch('-front:Hello, world'), [{ property: 'front', value: 'Hello, world', exclude: true }]);
+	assert.equal(matchesSearch({ ...a, front: 'literal -type:Cloze' }, parseSearch('-front:"literal -type:Cloze"')), false);
+});
+
+test('empty exclusion values are ignored while entering or clearing a query', () => {
+	for (const query of ['-tag:', '-tag: , , -type: ', '-status:', '-deck:""']) {
+		assert.deepEqual(parseSearch(query), []);
+		for (const mode of ['and', 'or'] as const) assert.equal(matchesSearch(a, parseSearch(query), mode), true);
+	}
+	assert.deepEqual(parseSearch('-tag: , t1,, -type: -source: a.md'), [
+		{ property: 'tag', value: 't1', exclude: true }, { property: 'source', value: 'a.md', exclude: true },
+	]);
+});
+
 test('deck hierarchy owns each card once; tags are flat independent labels', () => {
 	const roots = groupCards([a, b, c], true, false);
 	assert.equal(roots.length, 1);
