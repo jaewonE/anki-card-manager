@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager는 `obsidian-to-anki` 마커 블록을 Obsidian 안에서 간결한 접이식 카드로 보여 주고, Vault 전체 카드의 원본 Markdown을 한 화면에서 관리하게 해 주는 확장 프로그램입니다. 버전: **0.2.1**.
+Anki Card Manager는 `obsidian-to-anki` 마커 블록을 Obsidian 안에서 간결한 접이식 카드로 보여 주고, Vault 전체 카드의 원본 Markdown을 한 화면에서 관리하게 해 주는 확장 프로그램입니다. 버전: **0.2.0**.
 
 ## 주요 기능
 
@@ -76,7 +76,7 @@ Text:
 
 카드를 펼치고 아래쪽 삼각형이 붙은 유형 이름을 누르면 Obsidian 기본 플로팅 메뉴에서 **Obsidian-Basic**과 **Cloze**를 선택할 수 있습니다. 키보드 선택도 지원합니다. Cloze에서 Basic으로 바꾸면 `Text:`를 `Back:`으로 바꾸고, 질문·답변의 단일/이중 콜론 빈칸 표기를 답변 텍스트로 풀어냅니다. Markdown 서식은 유지하고 힌트는 제거합니다. Basic에서 Cloze로 바꿀 때는 유형과 구분자(`Text:`)만 변경하며 빈칸을 자동으로 만들지 않습니다. 유형을 바꿀 때 ID와 등록 상태는 유지합니다.
 
-유형 옆의 **Registered** 또는 **Unregistered** 버튼을 누르면 등록 상태가 전환됩니다. 색상은 카드 아이콘과 같으며 등록 상태에서는 파란색, 등록 해제 상태에서는 붉은색입니다. 다크 모드에서는 설정된 더 밝은 색을 사용합니다. 등록 해제 시 독립된 ID 줄을 제거하고 설정된 비활성 트리거로 바꾸며, 재등록 시 활성 트리거를 복원하되 ID를 생성하지는 않습니다. Live Preview에서는 펼침을 유지하고 편집기의 실행 취소·저장을 사용합니다. 읽기 화면의 버튼은 원본 파일을 수정한 뒤 화면을 갱신합니다. 이 상태는 Markdown 마커 기준이며 Anki에 실제 노트가 존재하는지 여부를 뜻하지 않습니다.
+유형 옆의 **Registered** 또는 **Unregistered** 버튼을 누르면 등록 상태가 전환됩니다. 색상은 카드 아이콘과 같습니다. 등록 해제 시 독립된 ID 줄을 제거하고 설정된 비활성 트리거로 바꾸며, 재등록 시 활성 트리거를 복원하되 ID를 생성하지는 않습니다. Live Preview에서는 펼침을 유지하고 편집기의 실행 취소·저장을 사용합니다. 읽기 화면의 버튼은 원본 파일을 수정한 뒤 화면을 갱신합니다. 이 상태는 Markdown 마커 기준이며 Anki에 실제 노트가 존재하는지 여부를 뜻하지 않습니다.
 
 ## 사용 방법
 

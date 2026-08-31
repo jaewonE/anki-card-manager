@@ -1,11 +1,5 @@
 # Changelog
 
-## 0.2.1
-
-- Keep the individual-card Registered status button explicitly blue to match its icon, while retaining the red Unregistered status treatment.
-- Give manager Source links the same brighter, padded question-link treatment.
-- Place the Select all matching cards checkbox before its label and keep the collapse/expand-all control immediately beside it.
-
 ## 0.2.0
 
 - Keep raw Markdown visible in Obsidian Source mode and render interactive cards in Reading view with section-aware deduplication and managed component cleanup.
