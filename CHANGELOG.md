@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Keep raw Markdown visible in Obsidian Source mode and render interactive cards in Reading view with section-aware deduplication and managed component cleanup.
+- Use the supplied Material Symbols Light highlighter for Cloze. ArrowUp from below a card stack enters the last card at its closing marker without deleting source.
+- Replace virtual document-end rendering with confirmed physical vault-wide card relocation above footnotes. Preserve source contents/order/YAML/line endings, normalize vacated gaps, and keep inline placement as the default.
+- Require a warning, acknowledgement and final confirmation before collection; retain verified source backups, compare snapshots, roll back safe failures, and recover interrupted or repeated collections without overwriting concurrent edits. Installation/startup never relocate notes.
+- Add an independent shared group sampling Count/Rate mode, including global Count 10 with group Rate 30/40/30. Keep deterministic seed 42, exact total quotas and failure-without-selection-change behavior.
+- Add comma-separated tag/deck/type search and a blue/orange global AND/OR button immediately right of search. Apply the selected mode to both comma lists and separately listed conditions; default/reset to AND.
+- Style grouping and sampling with pale blue/green panels, align Sampling label size, refine question padding/background/radius, and make edit-dialog source locations open the card in its note.
+- Expand regression and browser fixtures and update equivalent English/Korean usage, migration and recovery documentation. Retain Obsidian 1.5.0 compatibility.
+
 ## 0.1.5
 
 - Use the supplied Carbon filter-reset and Ant Design file-sync SVG geometry. Separate Search/Filter, Grouping and Change state controls with blue grouping and pale-purple state actions.

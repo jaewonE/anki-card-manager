@@ -28,7 +28,7 @@ export function renderTriggerSettings(container: HTMLElement, plugin: AnkiCardMa
 				catch (error) { new Notice(error instanceof Error ? error.message : 'Invalid triggers.'); return; }
 				void run(() => plugin.applyTriggers(draft));
 			}));
-	if (plugin.migrationBlocked) {
+	if (plugin.triggerRecoveryPending) {
 		new Setting(container).setName('Unfinished trigger migration').setDesc('Card automation is paused. Recovery restores unchanged migrated files without overwriting concurrent edits, or finalizes a completed migration backup.')
 			.addButton((button) => button.setButtonText('Recover trigger migration').setDisabled(plugin.migrationBusy)
 				.onClick(() => void run(() => plugin.recoverTriggerMigration())));

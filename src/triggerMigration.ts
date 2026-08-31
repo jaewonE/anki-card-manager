@@ -17,13 +17,13 @@ export interface TriggerJournalStore {
 }
 export type SaveMarkers = (markers: CardMarkers) => Promise<void>;
 
-async function flushEditors(app: App): Promise<void> {
+export async function flushEditors(app: App): Promise<void> {
 	for (const leaf of app.workspace.getLeavesOfType('markdown')) {
 		if (leaf.view instanceof MarkdownView) await leaf.view.save();
 	}
 }
 
-async function restore(app: App, journal: TriggerJournal): Promise<void> {
+export async function restore(app: App, journal: Pick<TriggerJournal, 'files'>): Promise<void> {
 	const conflicts: string[] = [];
 	for (const entry of [...journal.files].reverse()) {
 		try {
@@ -36,7 +36,7 @@ async function restore(app: App, journal: TriggerJournal): Promise<void> {
 			});
 		} catch { conflicts.push(entry.path); }
 	}
-	if (conflicts.length) throw new Error(`Recovery left edited/missing files untouched: ${conflicts.join(', ')}. Restore these from the trigger migration backup, then retry recovery.`);
+	if (conflicts.length) throw new Error(`Recovery left edited/missing files untouched: ${conflicts.join(', ')}. Restore these from the migration backup, then retry recovery.`);
 }
 
 export async function migrateTriggers(app: App, previous: CardMarkers, next: CardMarkers,

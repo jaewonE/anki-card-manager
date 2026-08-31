@@ -10,7 +10,7 @@ import {
 	ViewPlugin,
 } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
-import { editorInfoField } from 'obsidian';
+import { editorInfoField, editorLivePreviewField } from 'obsidian';
 import type { App } from 'obsidian';
 import { AnkiCardsWidget } from './editorWidgets';
 import { parseAnkiCards } from './parser';
@@ -27,6 +27,7 @@ interface AnkiDecorationState {
 	truncateTitles: boolean;
 	markers: CardMarkers;
 	blocked: boolean;
+	livePreview: boolean;
 }
 
 function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
@@ -40,7 +41,6 @@ function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
 function buildDecorations(
 	state: EditorState,
 	app: App,
-	placement: CardPlacement,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
 	markers: CardMarkers,
@@ -50,31 +50,18 @@ function buildDecorations(
 	const ranges = [];
 
 	const visibleCards = cards.filter((card) => renderFocusedCard || !selectionTouchesCard(state, card));
-	const groups = placement === 'inline'
-		? groupAdjacentCards(state.doc.toString(), visibleCards) : visibleCards.map((card) => [card]);
+	// Collection is a confirmed source migration, never a virtual footer.
+	const groups = groupAdjacentCards(state.doc.toString(), visibleCards);
 	for (const group of groups) {
 		const first = group[0];
 		const last = group[group.length - 1];
 		if (!first || !last) continue;
-		const decoration =
-			placement === 'inline'
-				? Decoration.replace({
-						widget: new AnkiCardsWidget(app, group, false, truncateTitles),
-						block: true,
-						inclusive: false,
-					})
-				: Decoration.replace({ inclusive: false });
+		const decoration = Decoration.replace({
+			widget: new AnkiCardsWidget(app, group, false, truncateTitles),
+			block: true,
+			inclusive: false,
+		});
 		ranges.push(decoration.range(first.renderFrom, last.renderTo));
-	}
-
-	if (placement === 'document-end' && cards.length > 0) {
-		ranges.push(
-			Decoration.widget({
-				widget: new AnkiCardsWidget(app, cards, true, truncateTitles),
-				block: true,
-				side: 1,
-			}).range(state.doc.length),
-		);
 	}
 
 	return Decoration.set(ranges, true);
@@ -83,13 +70,12 @@ function buildDecorations(
 function safeBuildDecorations(
 	state: EditorState,
 	app: App,
-	placement: CardPlacement,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
 	markers: CardMarkers,
 ): DecorationSet {
 	try {
-		return buildDecorations(state, app, placement, renderFocusedCard, truncateTitles, markers);
+		return buildDecorations(state, app, renderFocusedCard, truncateTitles, markers);
 	} catch (error) {
 		console.error('Anki Card Manager: card rendering was disabled for this editor', error);
 		return Decoration.none;
@@ -118,12 +104,13 @@ export function createAnkiCardEditorExtension(
 			const truncateTitles = getTruncateTitles();
 			const markers = { ...getMarkers() };
 			const blocked = isBlocked();
+			const livePreview = state.field(editorLivePreviewField, false) !== false;
 			return {
-				decorations: blocked ? Decoration.none : safeBuildDecorations(state, app, placement, false, truncateTitles, markers),
+				decorations: blocked || !livePreview ? Decoration.none : safeBuildDecorations(state, app, false, truncateTitles, markers),
 				editorFocused: true,
 				placement,
 				truncateTitles,
-				markers, blocked,
+				markers, blocked, livePreview,
 			};
 		},
 		update(value, transaction) {
@@ -135,6 +122,7 @@ export function createAnkiCardEditorExtension(
 			const truncateTitles = getTruncateTitles();
 			const markers = { ...getMarkers() };
 			const blocked = isBlocked();
+			const livePreview = transaction.state.field(editorLivePreviewField, false) !== false;
 			const selectionChanged = !transaction.startState.selection.eq(
 				transaction.state.selection,
 			);
@@ -143,15 +131,14 @@ export function createAnkiCardEditorExtension(
 				!selectionChanged &&
 				editorFocused === value.editorFocused &&
 				placement === value.placement && truncateTitles === value.truncateTitles &&
-				blocked === value.blocked && sameMarkers(markers, value.markers)
+				blocked === value.blocked && livePreview === value.livePreview && sameMarkers(markers, value.markers)
 			) {
 				return value;
 			}
 			return {
-				decorations: blocked ? Decoration.none : safeBuildDecorations(
+				decorations: blocked || !livePreview ? Decoration.none : safeBuildDecorations(
 					transaction.state,
 					app,
-					placement,
 					!editorFocused,
 					truncateTitles,
 					markers,
@@ -159,7 +146,7 @@ export function createAnkiCardEditorExtension(
 				editorFocused,
 				placement,
 				truncateTitles,
-				markers, blocked,
+				markers, blocked, livePreview,
 			};
 		},
 		provide(field) {
@@ -213,5 +200,5 @@ export function createAnkiCardEditorExtension(
 	});
 
 	return [decorationField, focusWatcher,
-		protectCardDeletion((state) => state.field(decorationField).decorations, focusEffect, getPlacement, getMarkers)];
+		protectCardDeletion((state) => state.field(decorationField).decorations, focusEffect, getMarkers)];
 }

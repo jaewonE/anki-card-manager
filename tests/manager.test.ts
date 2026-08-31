@@ -12,6 +12,8 @@ import { DEFAULT_MARKERS, replaceTriggers } from '../src/markers';
 import type { CardMarkers } from '../src/markers';
 import type { TriggerJournal, TriggerJournalStore } from '../src/triggerMigration';
 import type AnkiCardManagerPlugin from '../src/main';
+import type { PlacementJournal, PlacementJournalStore, PlacementState } from '../src/placementMigration';
+import type { MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
 
 type Harness = typeof import('./support/managerHarness');
 let harness: Harness;
@@ -51,6 +53,186 @@ function appFor(sources = fixture()) {
 	}, workspace: { getLeavesOfType: () => [] } } as unknown as App;
 	return { app, sources, writes };
 }
+
+test('physical collection preserves card bytes, YAML, order, fences, CRLF and footnotes; repeated collection is stable', () => {
+	for (const eol of ['\n', '\r\n']) {
+		const source = (yaml + 'Before\n\n\n' + basic('One') + '\n\nMiddle\n\n```php-template\n' +
+			basic('Two') + '\n' + basic('Three') + '```\n\nTail\n\n[^1]: Keep this footnote\n    continued\n').replace(/\n/g, eol);
+		const output = harness.collectCardsAtEnd(source);
+		assert.deepEqual(parse(output).map((card) => card.raw), parse(source).map((card) => card.raw));
+		assert.ok(output.startsWith(yaml.replace(/\n/g, eol) + `Before${eol}Middle${eol}Tail${eol}${eol}`));
+		assert.ok(output.endsWith(`[^1]: Keep this footnote${eol}    continued${eol}`));
+		assert.ok(output.indexOf('Tail') < output.indexOf('<START_ANKI>'));
+		assert.ok(output.lastIndexOf('<END_ANKI>') < output.indexOf('[^1]:'));
+		assert.equal((output.match(/```/g) ?? []).length, 2);
+		assert.equal(harness.collectCardsAtEnd(output), output);
+	}
+	const customSource = '\uFEFF' + replaceTriggers(note, DEFAULT_MARKERS, custom);
+	const collected = harness.collectCardsAtEnd(customSource, custom);
+	assert.ok(collected.startsWith('\uFEFF---'));
+	assert.equal(parseAnkiCards(collected, '', undefined, custom).length, 2);
+});
+
+test('collection ignores fake code footnotes and unrelated whitespace; handles EOF and unregistered cards', () => {
+	const source = 'Intro\n\n\nKeep spacing\n```md\n[^fake]: example\n```\n' + basic('One') + 'Tail';
+	const output = harness.collectCardsAtEnd(source);
+	assert.ok(output.startsWith('Intro\n\n\nKeep spacing\n```md\n[^fake]: example\n```\nTail\n\n'));
+	assert.equal(output.endsWith('\n'), false);
+	assert.equal(harness.collectCardsAtEnd(output), output);
+	const disabled = basic('One').replace('<START_ANKI>', '<ANKI_START>').replace('<END_ANKI>', '<ANKI_END>');
+	assert.equal(parse(harness.collectCardsAtEnd(disabled + 'Tail\n'))[0]!.registered, false);
+	assert.equal(harness.collectCardsAtEnd('No cards\n\n\n'), 'No cards\n\n\n');
+	const bomCard = harness.collectCardsAtEnd('\uFEFF' + basic('One') + 'Tail\n');
+	assert.ok(bomCard.startsWith('\uFEFFTail\n\n<START_ANKI>'));
+	assert.equal(bomCard.split('\uFEFF').length, 2);
+	assert.equal(harness.collectCardsAtEnd(bomCard), bomCard);
+	assert.throws(() => harness.collectCardsAtEnd('---\nunclosed YAML\n' + basic('One')), /closing delimiter/);
+});
+
+function placementStore() {
+	let pending: PlacementJournal | null = null;
+	const backups: PlacementJournal[] = [];
+	const store: PlacementJournalStore = {
+		read: () => Promise.resolve(pending),
+		write: (journal) => { pending = JSON.parse(JSON.stringify(journal)) as PlacementJournal; return Promise.resolve(); },
+		archive: () => { if (pending) backups.push(pending); pending = null; return Promise.resolve('placement-backups/test.json'); },
+	};
+	return { store, backups };
+}
+const inlinePlacement: PlacementState = { cardPlacement: 'inline', placementMigrationId: '' };
+
+test('placement migration journals before all writes and commits only afterward; backup failure writes nothing', async () => {
+	const { app, sources, writes } = appFor();
+	const { store, backups } = placementStore();
+	const process = app.vault.process.bind(app.vault);
+	app.vault.process = async (file, transform) => { assert.ok(await store.read()); return process(file, transform); };
+	let saved = inlinePlacement;
+	const result = await harness.migratePlacement(app, inlinePlacement, DEFAULT_MARKERS, store, (value) => {
+		assert.ok(writes.length); saved = value; return Promise.resolve();
+	});
+	assert.equal(saved.cardPlacement, 'document-end'); assert.ok(saved.placementMigrationId);
+	assert.equal(result.files, writes.length); assert.equal(await store.read(), null);
+	assert.equal(backups[0]!.files[0]!.before, note);
+	assert.equal(sources.get('a.md'), harness.collectCardsAtEnd(note));
+	const broken = placementStore().store; broken.write = () => Promise.reject(new Error('disk full'));
+	const fresh = appFor();
+	await assert.rejects(harness.migratePlacement(fresh.app, inlinePlacement, DEFAULT_MARKERS, broken, () => Promise.resolve()), /disk full/);
+	assert.equal(fresh.writes.length, 0);
+});
+
+test('placement write/settings failures roll back byte-exact snapshots; concurrent edits remain pending', async () => {
+	for (const conflict of [false, true]) {
+		const { app, sources } = appFor(new Map([['a.md', note], ['b.md', note]]));
+		const { store } = placementStore();
+		const process = app.vault.process.bind(app.vault); let failed = false;
+		app.vault.process = (file, transform) => {
+			if (!failed && file.path === 'b.md') {
+				failed = true; if (conflict) sources.set('a.md', sources.get('a.md')! + 'user edit');
+				return Promise.reject(new Error('write failed'));
+			}
+			return process(file, transform);
+		};
+		await assert.rejects(harness.migratePlacement(app, inlinePlacement, DEFAULT_MARKERS, store, () => Promise.resolve()), conflict ? /paused/ : /restored/);
+		if (!conflict) { assert.equal(sources.get('a.md'), note); assert.equal(await store.read(), null); }
+		else {
+			assert.ok(sources.get('a.md')!.endsWith('user edit')); assert.ok(await store.read());
+			await assert.rejects(harness.recoverPlacement(app, store, inlinePlacement, () => Promise.resolve()), /left edited/);
+			sources.set('a.md', note);
+			await harness.recoverPlacement(app, store, inlinePlacement, () => Promise.resolve());
+			assert.equal(await store.read(), null);
+		}
+	}
+	const { app, sources } = appFor();
+	await assert.rejects(harness.migratePlacement(app, inlinePlacement, DEFAULT_MARKERS, placementStore().store,
+		(value) => value.cardPlacement === 'document-end' ? Promise.reject(new Error('settings failed')) : Promise.resolve()), /restored/);
+	assert.equal(sources.get('a.md'), note);
+});
+
+test('repeat collection recovery uses unique commit stamp and never reverts edits after a committed move', async () => {
+	const { app, sources } = appFor(); const { store } = placementStore();
+	const previous: PlacementState = { cardPlacement: 'document-end', placementMigrationId: 'older' };
+	let saved = previous;
+	const archive = store.archive.bind(store); store.archive = () => Promise.reject(new Error('archive failed'));
+	await assert.rejects(harness.migratePlacement(app, previous, DEFAULT_MARKERS, store, (value) => { saved = value; return Promise.resolve(); }), /Cards were moved/);
+	assert.notEqual(saved.placementMigrationId, previous.placementMigrationId);
+	store.archive = archive; sources.set('a.md', sources.get('a.md')! + 'later user edit');
+	await harness.recoverPlacement(app, store, saved, () => Promise.reject(new Error('must not resave')));
+	assert.ok(sources.get('a.md')!.endsWith('later user edit')); assert.equal(await store.read(), null);
+});
+
+test('collection confirmation requires explicit checkbox plus final button; cancel changes nothing', async () => {
+	let moves = 0; let finished = 0;
+	const modal = new harness.ConfirmCardCollectionModal(appFor().app, () => { moves++; return Promise.resolve(); }, () => finished++);
+	modal.open();
+	assert.equal(button(modal.contentEl, 'Move all cards').disabled, true);
+	button(modal.contentEl, 'Move all cards').click(); assert.equal(moves, 0);
+	button(modal.contentEl, 'Cancel').click(); assert.equal(moves, 0);
+	modal.open(); modal.contentEl.querySelector<HTMLInputElement>('input')!.click();
+	button(modal.contentEl, 'Move all cards').click(); await new Promise((resolve) => setTimeout(resolve, 0));
+	assert.equal(moves, 1); assert.equal(finished, 1); assert.equal(modal.modalEl.isConnected, false);
+});
+
+test('Reading view renders a multi-section stack once, keeps prose, and cleans up card components', async () => {
+	const source = 'Before\n\n' + basic('One') + '\n' + basic('Two') + '\nAfter\n';
+	const children: MarkdownRenderChild[] = [];
+	const { app } = appFor(new Map([['a.md', source]]));
+	let blocked = false;
+	const render = harness.createReadingPostProcessor(app, () => harness.DEFAULT_SETTINGS, () => blocked, () => {});
+	const lines = source.split('\n'); const host = dom.window.document.body.createDiv({ cls: 'markdown-preview-view' });
+	try {
+		for (let index = 0; index < lines.length; index += 1) {
+			const section = host.createDiv({ text: lines[index] });
+			const ctx = { sourcePath: 'a.md', getSectionInfo: () => ({ text: source, lineStart: index, lineEnd: index }),
+				addChild: (child: MarkdownRenderChild) => { child.load(); children.push(child); } } as unknown as MarkdownPostProcessorContext;
+			await render(section, ctx);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.equal(host.querySelectorAll('details').length, 2);
+		assert.equal(host.querySelectorAll('.anki-card-manager-stack').length, 1);
+		assert.ok(host.textContent?.includes('Before')); assert.ok(host.textContent?.includes('After'));
+		assert.ok(!host.textContent?.includes('<START_ANKI>'));
+		const raw = host.createDiv({ text: source }); blocked = true;
+		await render(raw, { getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: lines.length }) } as unknown as MarkdownPostProcessorContext);
+		assert.equal(raw.textContent, source);
+	} finally { for (const child of children) child.unload(); host.remove(); }
+	assert.equal(harness.Component.active, 0);
+});
+
+test('Reading view preserves surrounding prose in one section, supports fences/custom markers and never transforms Source containers', async () => {
+	const source = replaceTriggers('Before\n\n```php-template\n' + basic('One') + '```\n\nAfter\n', DEFAULT_MARKERS, custom);
+	const children: MarkdownRenderChild[] = [];
+	const render = harness.createReadingPostProcessor(appFor().app, () => ({ ...harness.DEFAULT_SETTINGS, markers: custom }), () => false, () => {});
+	const el = dom.window.document.body.createDiv();
+	const ctx = { sourcePath: 'a.md', getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: source.split('\n').length }),
+		addChild: (child: MarkdownRenderChild) => { child.load(); children.push(child); } } as unknown as MarkdownPostProcessorContext;
+	try {
+		await render(el, ctx); await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.equal(el.querySelectorAll('details').length, 1);
+		assert.ok(el.textContent?.startsWith('Before')); assert.ok(el.textContent?.trim().endsWith('After'));
+		assert.equal(el.querySelector('pre'), null);
+		el.classList.add('markdown-source-view'); el.setText(source); await render(el, ctx);
+		assert.equal(el.textContent, source); assert.equal(el.querySelector('details'), null);
+	} finally { for (const child of children) child.unload(); el.remove(); }
+});
+
+test('placement journal validates and verifies durable backups and archives without overwriting', async () => {
+	const files = new Map<string, string>(); const directories = new Set<string>();
+	const app = { vault: { configDir: '.config', adapter: {
+		exists: (path: string) => Promise.resolve(files.has(path) || directories.has(path)),
+		read: (path: string) => Promise.resolve(files.get(path)!),
+		write: (path: string, value: string) => { files.set(path, value); return Promise.resolve(); },
+		mkdir: (path: string) => { directories.add(path); return Promise.resolve(); },
+		rename: (from: string, to: string) => { assert.ok(!files.has(to)); files.set(to, files.get(from)!); files.delete(from); return Promise.resolve(); },
+	} } } as unknown as App;
+	const store = new harness.VaultPlacementJournal(app, 'anki-card-manager');
+	const journal: PlacementJournal = { version: 1, id: 'test-move', previous: inlinePlacement, files: [{ path: 'a.md', before: note, after: harness.collectCardsAtEnd(note) }] };
+	await store.write(journal); assert.equal((await store.read())!.files[0]!.before, note);
+	const first = await store.archive('applied'); await store.write(journal); const second = await store.archive('restored');
+	assert.notEqual(first, second); assert.equal(await store.read(), null);
+	files.set(store.path, '{broken'); await assert.rejects(store.read());
+	app.vault.adapter.write = () => Promise.resolve();
+	await assert.rejects(store.write(journal), /Could not verify/);
+});
 
 test('bulk unregister/delete applies only selected blocks once and preserves other text', () => {
 	const cards = parse();
@@ -228,6 +410,70 @@ test('sampling defaults disabled Rate 30, executes only on selection, preserves 
 	} finally { await close(); }
 });
 
+test('search mode button applies OR to comma and listed terms, stays beside search, and resets to AND', async () => {
+	const { container, close } = await openView();
+	try {
+		const search = container.querySelector<HTMLInputElement>('input[type=search]')!;
+		const toggle = container.querySelector<HTMLButtonElement>('.anki-card-manager-search-mode')!;
+		assert.equal(search.nextElementSibling, toggle); assert.equal(toggle.textContent, 'AND');
+		search.value = 'tag:Inbox,Missing'; search.dispatchEvent(inputEvent());
+		assert.equal(container.querySelectorAll('tbody tr').length, 0);
+		toggle.click(); assert.equal(toggle.textContent, 'OR'); assert.equal(toggle.dataset.mode, 'or');
+		assert.equal(container.querySelectorAll('tbody tr').length, 3);
+		search.value = 'tag:Missing front:One'; search.dispatchEvent(inputEvent());
+		assert.equal(container.querySelectorAll('tbody tr').length, 1);
+		toggle.click(); assert.equal(container.querySelectorAll('tbody tr').length, 0);
+		toggle.click(); container.querySelector<HTMLButtonElement>('[data-icon="carbon--filter-reset"]')!.click();
+		assert.equal(toggle.textContent, 'AND'); assert.equal(container.querySelectorAll('tbody tr').length, 3);
+	} finally { await close(); }
+});
+
+test('all groups synchronize an independent sampling mode and global Count 10 uses group shares 30/40/30', async () => {
+	const sample = new Map(['A', 'B', 'C'].map((tag) => [`${tag}.md`, yaml.replace('[Inbox, Study/UML]', `[${tag}]`) +
+		Array.from({ length: 10 }, (_, index) => basic(`${tag}${index}`)).join('')]));
+	const { container, close, writes } = await openView(sample);
+	try {
+		button(container, 'Group by tag').click();
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click();
+		container.querySelector<HTMLInputElement>('[aria-label="Enable sampling"]')!.click();
+		const global = container.querySelector<HTMLSelectElement>('[aria-label="Sampling mode"]')!;
+		global.value = 'count'; global.dispatchEvent(changeEvent());
+		container.querySelector<HTMLInputElement>('[aria-label="Sampling amount"]')!.value = '10';
+		const modes = [...container.querySelectorAll<HTMLSelectElement>('.anki-card-manager-group-sampling select')];
+		modes[0]!.value = 'count'; modes[0]!.dispatchEvent(changeEvent());
+		assert.ok(modes.every((mode) => mode.value === 'count'));
+		modes[1]!.value = 'rate'; modes[1]!.dispatchEvent(changeEvent());
+		assert.ok(modes.every((mode) => mode.value === 'rate')); assert.equal(global.value, 'count');
+		for (const [index, input] of [...container.querySelectorAll<HTMLInputElement>('.anki-card-manager-group-sampling input')].entries()) {
+			input.value = String([30, 40, 30][index]); input.dispatchEvent(inputEvent());
+		}
+		button(container, 'Execute').click();
+		assert.deepEqual(['A', 'B', 'C'].map((tag) => [...container.querySelectorAll<HTMLInputElement>('tbody input:checked')]
+			.filter((box) => box.getAttribute('aria-label')?.startsWith(`Select card: ${tag}`)).length), [3, 4, 3]);
+		assert.equal(writes.length, 0);
+		assert.equal(container.querySelector('.anki-card-manager-sampling-controls label')?.textContent, 'Sampling');
+	} finally { await close(); }
+});
+
+test('edit dialog source link opens the correct note and card location without saving draft fields', async () => {
+	const { app, writes } = appFor();
+	const calls: unknown[] = [];
+	const view = new harness.MarkdownView();
+	Object.assign(view, { editor: { setCursor: (position: unknown) => calls.push(position), scrollIntoView: () => {}, focus: () => calls.push('focus') } });
+	Object.assign(app.workspace, { getLeaf: () => ({ view, openFile: (file: { path: string }) => { calls.push(file.path); return Promise.resolve(); }, setViewState: () => Promise.resolve() }) });
+	const container = dom.window.document.body.createDiv();
+	const manager = new harness.AnkiManagerView(new harness.WorkspaceLeaf(app, container) as unknown as WorkspaceLeaf);
+	try {
+		await manager.onOpen(); container.querySelector<HTMLButtonElement>('.anki-card-manager-question-link')!.click();
+		const modal = dom.window.document.querySelector<HTMLElement>('.modal')!;
+		modal.querySelector<HTMLTextAreaElement>('textarea')!.value = 'unsaved draft';
+		modal.querySelector<HTMLButtonElement>('[aria-label="Open card source file"]')!.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.equal(calls[0], 'a.md'); assert.equal(JSON.stringify(calls[1]), JSON.stringify({ line: parse()[0]!.startLine, ch: 0 }));
+		assert.ok(calls.includes('focus')); assert.equal(writes.length, 0); assert.equal(modal.isConnected, false);
+	} finally { await manager.onClose(); container.remove(); }
+});
+
 test('group sampling allocates selected unique cards, preserves input focus and rejects insufficient remainder without writes', async () => {
 	const sample = new Map([['a.md', yaml.replace('[Inbox, Study/UML]', '[A]') + Array.from({ length: 8 }, (_, index) => basic(`A${index}`)).join('')],
 		['b.md', yaml.replace('[Inbox, Study/UML]', '[B]') + Array.from({ length: 8 }, (_, index) => basic(`B${index}`)).join('')]]);
@@ -239,6 +485,8 @@ test('group sampling allocates selected unique cards, preserves input focus and 
 		assert.equal(input.disabled, true);
 		container.querySelector<HTMLInputElement>('[aria-label="Enable sampling"]')!.click();
 		const mode = container.querySelector<HTMLSelectElement>('[aria-label="Sampling mode"]')!; mode.value = 'count'; mode.dispatchEvent(changeEvent());
+		const groupMode = container.querySelector<HTMLSelectElement>('[aria-label="Sampling mode for tag group: A"]')!;
+		groupMode.value = 'count'; groupMode.dispatchEvent(changeEvent());
 		container.querySelector<HTMLInputElement>('[aria-label="Sampling amount"]')!.value = '10';
 		input.focus(); input.value = '6'; input.dispatchEvent(inputEvent());
 		assert.equal(dom.window.document.activeElement, input);
@@ -248,7 +496,8 @@ test('group sampling allocates selected unique cards, preserves input focus and 
 		input.value = '1'; input.dispatchEvent(inputEvent()); button(container, 'Execute').click();
 		assert.match(container.querySelector('[role="alert"]')!.textContent, /Not enough unique cards/);
 		assert.equal(container.querySelectorAll('tbody input:checked').length, 10); assert.equal(writes.length, 0);
-		mode.value = 'rate'; mode.dispatchEvent(changeEvent()); assert.equal(input.value, '');
+		mode.value = 'rate'; mode.dispatchEvent(changeEvent()); assert.equal(input.value, '1');
+		groupMode.value = 'rate'; groupMode.dispatchEvent(changeEvent()); assert.equal(input.value, '');
 	} finally { await close(); }
 });
 
@@ -511,7 +760,7 @@ test('manager rescans custom triggers and suspends row actions until migration r
 		paused = true; await view.refresh();
 		assert.equal(container.querySelectorAll('tbody tr').length, 0);
 		assert.equal(button(container, 'Delete').disabled, true);
-		assert.ok(container.textContent?.includes('Trigger migration is pending'));
+		assert.ok(container.textContent?.includes('Card migration is pending'));
 		paused = false; await view.refresh();
 		assert.equal(container.querySelectorAll('tbody tr').length, 2);
 		assert.ok(container.textContent?.includes('0 selected'));

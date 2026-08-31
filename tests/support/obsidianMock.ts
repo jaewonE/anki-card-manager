@@ -1,4 +1,4 @@
-import { StateField } from '@codemirror/state';
+import { StateEffect, StateField } from '@codemirror/state';
 import MarkdownIt from 'markdown-it';
 import { dump, load } from 'js-yaml';
 
@@ -8,6 +8,11 @@ export const editorInfoField = StateField.define({
 	create: () => ({ file: { path: 'test.md' } }),
 	update: (value) => value,
 });
+export const setLivePreview = StateEffect.define<boolean>();
+export const editorLivePreviewField = StateField.define({
+	create: () => true,
+	update: (value, transaction) => { for (const effect of transaction.effects) if (effect.is(setLivePreview)) value = effect.value; return value; },
+});
 
 export class Component {
 	static active = 0;
@@ -16,6 +21,7 @@ export class Component {
 	register(callback: () => void): void { this.cleanup.push(callback); }
 	unload(): void { Component.active -= 1; for (const callback of this.cleanup.splice(0)) callback(); }
 }
+export class MarkdownRenderChild extends Component { constructor(readonly containerEl: HTMLElement) { super(); } }
 
 // Only Obsidian's host APIs are mocked. The extension, widgets, renderer,
 // CodeMirror state and CodeMirror DOM implementation are the real modules.

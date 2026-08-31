@@ -345,6 +345,11 @@
 
 .anki-card-manager-group-controls {
 	flex-wrap: wrap;
+	margin: var(--size-4-3) 0;
+	padding: var(--size-4-3);
+	background: color-mix(in srgb, #5ba1ef 8%, var(--background-primary));
+	border: 1px solid color-mix(in srgb, #5ba1ef 25%, var(--background-modifier-border));
+	border-radius: var(--radius-m);
 }
 
 .anki-card-manager-group-controls button[aria-pressed="true"] {
@@ -377,7 +382,13 @@
 	background: color-mix(in srgb, #b391ef 48%, var(--background-primary));
 }
 .anki-card-manager-results-toolbar { justify-content: space-between; flex-wrap: wrap; }
-.anki-card-manager-sampling { margin: var(--size-4-3) 0; padding: var(--size-4-2) 0; }
+.anki-card-manager-sampling {
+	margin: var(--size-4-3) 0;
+	padding: var(--size-4-3);
+	background: color-mix(in srgb, #62bb8b 8%, var(--background-primary));
+	border: 1px solid color-mix(in srgb, #62bb8b 25%, var(--background-modifier-border));
+	border-radius: var(--radius-m);
+}
 .anki-card-manager-sampling-controls { flex-wrap: wrap; }
 .anki-card-manager-sampling-controls label { display: inline-flex; align-items: center; font-weight: var(--font-semibold); }
 .anki-card-manager-sampling-controls input[type="number"] { width: 6rem; }
@@ -466,8 +477,22 @@
 	text-align: left;
 	white-space: normal;
 }
-.anki-card-manager-question-link { color: var(--text-normal); border: 0; font-weight: var(--font-medium); }
+.anki-card-manager-question-link {
+	color: var(--text-normal);
+	border: 0;
+	font-weight: var(--font-medium);
+	padding: 5px 7px;
+	background: color-mix(in srgb, var(--background-secondary) 25%, var(--background-primary));
+	border-radius: 3px;
+}
 .anki-card-manager-question-link:hover { text-decoration: underline; color: var(--text-accent); }
+
+.anki-card-manager-search-mode { min-width: 48px; font-weight: var(--font-semibold); box-shadow: none; }
+.anki-card-manager-search-mode[data-mode="and"] { background: #2978cf; color: #fff; }
+.anki-card-manager-search-mode[data-mode="or"] { background: #b9671b; color: #fff; }
+.theme-dark .anki-card-manager-search-mode[data-mode="and"] { background: #79baff; color: #172230; }
+.theme-dark .anki-card-manager-search-mode[data-mode="or"] { background: #f7b36d; color: #302017; }
+.anki-card-manager-reading-continuation { display: none; }
 
 .anki-card-manager-status.is-on {
 	background: color-mix(in srgb, var(--color-green) 15%, transparent);

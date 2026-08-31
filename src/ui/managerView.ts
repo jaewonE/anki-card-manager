@@ -1,9 +1,11 @@
-import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf, debounce } from 'obsidian';
+import { ItemView, TFile, WorkspaceLeaf, debounce } from 'obsidian';
 import type { BulkAction } from '../bulkActions';
 import { cardMetadataFromSource } from '../metadata';
 import { collectGroupCards, groupCards, selectionState } from '../managerModel';
 import type { CardGroup, RegistrationFilter } from '../managerModel';
 import { matchesSearch, parseSearch } from '../managerSearch';
+import type { SearchMode } from '../managerSearch';
+import { openCardSource } from '../sourceNavigation';
 import { parseAnkiCards } from '../parser';
 import type { AnkiCard } from '../types';
 import { DEFAULT_MARKERS } from '../markers';
@@ -20,6 +22,8 @@ export const ANKI_MANAGER_VIEW_TYPE = 'anki-card-manager-view';
 export class AnkiManagerView extends ItemView {
 	private cards: AnkiCard[] = [];
 	private query = '';
+	private searchMode: SearchMode = 'and';
+	private searchModeButton!: HTMLButtonElement;
 	private registrationFilter: RegistrationFilter = 'all';
 	private cardTypeFilter = '';
 	private byDeck = false;
@@ -106,8 +110,13 @@ export class AnkiManagerView extends ItemView {
 		const controls = container.createDiv({ cls: 'anki-card-manager-controls' });
 		controls.createSpan({ cls: 'anki-card-manager-control-label', text: 'Search/Filter' });
 		this.search = controls.createEl('input', { type: 'search',
-			placeholder: 'Search · tags:Inbox · deck:Mother::Child · type:Cloze', attr: { 'aria-label': 'Search cards' } });
+			placeholder: 'Search · tag:t1,t2 · deck:Mother::Child · type:Cloze', attr: { 'aria-label': 'Search cards' } });
 		this.search.addEventListener('input', () => { this.query = this.search.value; this.renderResults(); });
+		this.searchModeButton = controls.createEl('button', { cls: 'anki-card-manager-search-mode', attr: { type: 'button' } });
+		this.updateSearchMode();
+		this.searchModeButton.addEventListener('click', () => {
+			this.searchMode = this.searchMode === 'and' ? 'or' : 'and'; this.updateSearchMode(); this.renderResults();
+		});
 		this.status = controls.createEl('select', { attr: { 'aria-label': 'Filter registration status' } });
 		for (const [value, text] of [['all', 'All statuses'], ['registered', 'Registered markers'], ['unregistered', 'Unregistered markers']]) {
 			this.status.createEl('option', { value, text });
@@ -141,6 +150,7 @@ export class AnkiManagerView extends ItemView {
 
 	private reset(): void {
 		this.query = this.search.value = '';
+		this.searchMode = 'and'; this.updateSearchMode();
 		this.registrationFilter = 'all';
 		this.status.value = 'all';
 		this.cardTypeFilter = this.cardType.value = '';
@@ -151,6 +161,13 @@ export class AnkiManagerView extends ItemView {
 		this.sampling.reset();
 		this.updateGroupButtons();
 		this.renderResults();
+	}
+
+	private updateSearchMode(): void {
+		this.searchModeButton.setText(this.searchMode.toUpperCase());
+		this.searchModeButton.dataset.mode = this.searchMode;
+		this.searchModeButton.setAttribute('aria-label', `Search condition mode: ${this.searchMode.toUpperCase()}`);
+		this.searchModeButton.title = 'Combine all search terms, including comma-separated values. Status and card-type filters always narrow the results.';
 	}
 
 	private updateGroupButtons(): void {
@@ -175,12 +192,12 @@ export class AnkiManagerView extends ItemView {
 			this.results.empty();
 			this.sampling.setGroups([]);
 			this.collapseButton = undefined;
-			this.results.createEl('p', { text: 'Trigger migration is pending. Finish or recover it in plugin settings before managing cards.' });
+			this.results.createEl('p', { text: 'Card migration is pending. Finish or recover it in plugin settings before managing cards.' });
 			this.updateSelection();
 			return;
 		}
 		const terms = parseSearch(this.query);
-		const filtered = this.cards.filter((card) => matchesSearch(card, terms) && (this.registrationFilter === 'all' ||
+		const filtered = this.cards.filter((card) => matchesSearch(card, terms, this.searchMode) && (this.registrationFilter === 'all' ||
 			(card.registered ? 'registered' : 'unregistered') === this.registrationFilter) && (!this.cardTypeFilter || card.cardType === this.cardTypeFilter));
 		// Filtering never leaves invisible rows armed for a destructive bulk operation.
 		const visible = new Set(filtered.map((card) => card.key));
@@ -262,7 +279,7 @@ export class AnkiManagerView extends ItemView {
 	private table(container: HTMLElement, cards: AnkiCard[]): void {
 		renderTable(container, cards, {
 			select: (parent, group, label) => this.selectionBox(parent, group, label),
-			open: (card) => void this.openSource(card),
+			open: (card) => void openCardSource(this.app, card),
 			edit: (card) => new EditCardModal(this.app, card, () => this.refresh()).open(),
 		});
 	}
@@ -273,14 +290,4 @@ export class AnkiManagerView extends ItemView {
 		new BulkActionModal(this.app, selected, this.cards, kind, async () => { this.selected.clear(); await this.refresh(); }).open();
 	}
 
-	private async openSource(card: AnkiCard): Promise<void> {
-		const file = this.app.vault.getAbstractFileByPath(card.sourcePath);
-		if (!(file instanceof TFile)) { new Notice('Source file no longer exists.'); return; }
-		const leaf = this.app.workspace.getLeaf('tab');
-		await leaf.openFile(file);
-		if (leaf.view instanceof MarkdownView) {
-			leaf.view.editor.setCursor({ line: card.startLine, ch: 0 });
-			leaf.view.editor.scrollIntoView({ from: { line: card.startLine, ch: 0 }, to: { line: card.endLine, ch: 0 } }, true);
-		}
-	}
 }

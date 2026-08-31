@@ -3,6 +3,7 @@ export type CardPlacement = 'inline' | 'document-end';
 
 export interface AnkiCardManagerSettings {
 	cardPlacement: CardPlacement;
+	placementMigrationId?: string;
 	truncateTitles: boolean;
 	autoCompleteCards: boolean;
 	defaultCardType: string;

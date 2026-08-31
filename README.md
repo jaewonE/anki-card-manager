@@ -2,27 +2,27 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.1.5**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.0**.
 
 ## Features
 
-- Renders a complete `<START_ANKI>` / `<END_ANKI>` block as a warning-callout-style card after the editor selection leaves the block or the editor loses focus.
+- Renders complete card blocks in Live Preview after selection/focus leaves them, and in Reading view. Obsidian Source mode always shows raw Markdown.
 - Replaces an immediately surrounding Markdown code fence when the card is its only content, so no empty fence remains around the UI. Deleting that card also removes the exclusive fence.
 - Keeps the question visible and the answer inside a collapsible section. Select the circular pencil icon (**Edit source**) to reveal and focus its raw block, including in document-end mode. Card type appears in the answer header.
 - Shows full questions by default. Optional single-line ellipsis applies only while collapsed; expanding a card always reveals the full question.
-- Uses a blank icon for Cloze and an Anki-style card/star icon for other types: blue for registered cards and red for unregistered cards, with brighter dark-mode colors.
+- Uses the supplied Material Symbols Light highlighter icon for Cloze and an Anki-style card/star icon for other types: blue for registered cards and red for unregistered cards, with brighter dark-mode colors.
 - Uses a compact, centered all-edge shadow (4px blur, white in dark mode), with 6px side gutters to prevent clipping. Consecutive cards separated only by whitespace share one shadowed stack, with thin dividers and no individual rounding or shadows. Document-end collections use the same stack layout; the pencil edit button has no shadow.
 - Offers a floating card-type menu and a color-coded Registered/Unregistered toggle in the answer header. Both update the live editor with native undo/save support.
-- Keeps rendered cards in place by default, with an option to collect every rendered card at the bottom of the current document.
+- Keeps cards in place by default. Confirmed collection physically moves card source blocks across the entire vault to note ends, above footnotes, with durable backups and recovery.
 - Completes a line containing `<START_ANKI>` with the configured card type, blank question and answer areas, the appropriate separator, and `<END_ANKI>`. Typing or pressing Enter does not add another template if its closing marker already exists before the next start marker, including inline starts.
-- Backspace immediately after a rendered card/stack reveals source instead of deleting the hidden block. Forward Delete is protected too; ordinary text editing and explicit selection deletion remain available.
+- Backspace or ArrowUp immediately below a rendered stack enters the last card's source at its closing marker. Forward Delete is protected too; ordinary text editing and explicit selection deletion remain available.
 - Supports `Cloze` cards with `Text:` and independently revealable blanks, a reveal/hide-all toggle, and automatic hiding when the answer is closed.
 - Adds missing `anki_deck: Inbox` and `anki_tags: [Inbox]` YAML properties when a card is completed. These defaults are configurable.
 - Scans all Markdown files on demand and shows registered and unregistered cards in one searchable table.
 - Edits or deletes the exact source block and opens the source note at the card location.
 - Toggles registration without contacting Anki. Unregistering removes standalone `<!--ID: ... -->` lines and changes the markers to `<ANKI_START>` / `<ANKI_END>`; registering changes the markers back.
 - Separates Type and Deck columns; groups decks by `::` hierarchy, with optional flat tag groups inside each deck.
-- Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches such as `tags:Inbox`.
+- Keeps search focus/caret while updating results and supports case/whitespace-tolerant property searches, comma lists such as `tag:t1,t2`, and a color-coded AND/OR button for all search conditions (default AND).
 - Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
 - Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
@@ -76,7 +76,7 @@ The viewer also accepts the supplied single-colon form `{{c1:answer}}`; viewing 
 
 Expand a card and select its type label with the downward triangle. A native Obsidian floating menu offers **Obsidian-Basic** and **Cloze**, including keyboard selection. Converting Cloze to Basic changes `Text:` to `Back:` and unwraps single/double-colon cloze tokens in the question and answer, retaining the answer text and Markdown while removing hints. Converting Basic to Cloze changes the type and separator to `Text:` without adding blanks. IDs and registration state are preserved during type changes.
 
-Select **Registered** or **Unregistered** beside the type to toggle registration. Its color matches the card icon. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. The card stays open after these actions, and updates use the live editor's ordinary undo and save flow. This status describes the Markdown markers, not whether a note currently exists in Anki.
+Select **Registered** or **Unregistered** beside the type to toggle registration. Its color matches the card icon. Unregistering removes standalone IDs and uses the configured inactive triggers; registering restores the active triggers without creating an ID. In Live Preview the card stays open and updates use ordinary editor undo/save. Reading-view controls update the source file and refresh the preview. This status describes Markdown markers, not whether a note currently exists in Anki.
 
 ## Usage
 
@@ -95,24 +95,25 @@ The default manager view is a flat table. **Group by deck hierarchy** and **Grou
 
 Next to **Select all matching cards**, **전체 접기** (Collapse all) appears whenever any group is open, including descendants. Otherwise **전체 펼치기** (Expand all) opens every group.
 
-**Search/Filter** contains the search box and compact **All statuses / All card types** dropdowns, sized to the selected text so the search box takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. The header alone shows the filtered/total card count.
+**Search/Filter** contains the search box, its immediately adjacent **AND/OR** button, and compact **All statuses / All card types** dropdowns. AND is blue and OR is orange, with brighter dark-mode colors. Dropdowns fit the selected text so search takes the remaining width. Type options come from the current Vault scan. **Grouping** has blue active buttons and a pale blue panel. **Change state | N selected** sits above the bulk buttons in a pale purple panel; enabled state-action buttons use light purple. **Sampling** uses a pale green panel and the same label size. The header alone shows the filtered/total count.
 
-Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
+Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
 The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) rescans current Vault Markdown, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization.
 
 ### Search syntax
 
-Search is case-insensitive and ignores whitespace differences within values. Field searches use substring matching (except `status`, which matches `registered` or `unregistered` exactly). Multiple fields are combined with AND:
+Search is case-insensitive and ignores whitespace differences within values. Field searches use substring matching (except `status`, which matches `registered` or `unregistered` exactly). The button immediately right of search combines **all** conditions using AND (default, every condition) or OR (any condition), including comma-separated values and separately listed properties/free words:
 
 ```text
 tags:Inbox
+tag:Inbox,Math
 TAGS : in box
 deck:Mother::Child type:Cloze
 tags:"Study notes" path:software
 ```
 
-Supported fields: `deck` / `anki_deck`, `tags` / `tag` / `anki_tags`, `type`, `front` / `question`, `back` / `answer`, `path` / `source`, `status`, and `id`. A property value extends until the next property; quotes protect text that looks like a property. Free words before the first property are AND-matched across question, answer, type, deck, tags, path, and ID. Empty input shows all cards permitted by the status filter.
+Supported fields: `deck` / `anki_deck`, `tags` / `tag` / `anki_tags`, `type`, `front` / `question`, `back` / `answer`, `path` / `source`, `status`, and `id`. Deck/tag/type values split on commas (names cannot contain commas). `tag:t1,t2` is equivalent to `tag:t1 tag:t2` in either mode; OR also applies across different properties, not just a single list. A property value extends until the next property; quotes protect text that looks like a property. Free words before the first property search across question, answer, type, deck, tags, path, and ID using the same mode. Empty input shows all cards permitted by the status/type dropdown filters, which always narrow search results. Reset returns the mode to AND.
 
 ### Bulk changes and file-level YAML
 
@@ -128,12 +129,13 @@ Below Change state, enable **Sampling**, choose **Count** or **Rate**, enter an 
 
 - Count must be an integer from 1 to the number of selected unique cards.
 - Rate must be greater than 0 and at most 100; the total sample size is rounded up (`ceil(selected × rate / 100)`).
-- With grouping enabled, **Sampling:** inputs beside group labels allocate part of the global sample from selected cards in that group, including descendants. Empty means unallocated; explicit zero reserves no slots and excludes that group's cards from the remainder pool. Count allocations must be non-negative integers with a sum no greater than the total count. Rate allocations are shares of the final sample (0–100%), with a sum no greater than 100%.
+- With grouping enabled, **Sampling: Count/Rate + amount** beside each group allocates part of the global sample from its selected descendants. All group dropdowns share one mode, independent of the global mode, and changing one updates every group. Empty means unallocated; explicit zero excludes that group from the remainder pool. Group Count values are non-negative integers totaling no more than the final sample size. Group Rate values are shares of the final sample (0–100%), totaling no more than 100%.
 - Example: Count 10 with group A set to 6 draws 6 from A and 4 from outside A. From 100 selected cards, Rate 30 with A set to 50% draws 15 from A and 15 from outside A. Integer rate quotas use largest-remainder rounding, including the unallocated share, so they sum to the exact target.
+- Independent modes: global Count 10 with group Rate shares 30%, 40%, 30% draws 3, 4, 3 from disjoint groups with sufficient candidates. Global Rate can likewise use group Count quotas.
 - Undersized groups contribute every available selected card; missing slots go to the remainder pool. Cards cannot fill two slots, even across overlapping tags or parent/child groups. Smaller selected candidate pools are handled first, with stable group-key tie-breaking. Counts shown in overlapping groups can therefore include cards assigned through another group.
 - The remainder is drawn from selected unique cards **outside all explicitly allocated groups**. After drawing, if there are too few candidates to reach the target, an error is shown and the original selection is left intact. Reduce the sample or adjust/clear group values; cards left inside an allocated group are not silently used as the remainder.
 
-Changing Count/Rate or grouping clears group allocations. Group inputs disappear when filtered out, and their allocations are discarded. Reset restores sampling to disabled Rate 30%. Sampling configuration is local to the current manager view and is not persisted in plugin settings.
+Changing the shared **group** Count/Rate mode or grouping clears allocations; changing the **global** mode leaves group mode/values intact. Filtered-out groups lose their allocations. Reset restores disabled global Rate 30%, group Rate, and empty group values. Sampling configuration is local to the current manager view, not persisted.
 
 ## Commands and hotkeys
 
@@ -144,11 +146,19 @@ No default hotkeys are assigned. Configure shortcuts under **Settings → Hotkey
 
 ## Settings
 
-- **Card placement:** Keep cards in place (default) or collect them at the document end.
+- **Card placement:** Keep in place (default), or explicitly confirm physical vault-wide collection. **Collect cards again** re-collects later additions.
 - **Single-line titles:** Show one line with an ellipsis only on collapsed cards; off by default.
 - **Complete start markers:** Enable or disable automatic card completion.
 - **New card defaults:** Card type dropdown (`Obsidian-Basic` or `Cloze`, default `Obsidian-Basic`), deck (`Inbox`), and tag (`Inbox`).
 - **Card triggers:** Registered start/end and unregistered start/end. Defaults are `<START_ANKI>`, `<END_ANKI>`, `<ANKI_START>`, and `<ANKI_END>` respectively.
+
+### Collecting source blocks at document ends
+
+Choosing **Collect at document end** opens a warning dialog. A separate acknowledgement checkbox enables **Move all cards**. Cancel changes nothing. Confirming saves open editors, plans every Markdown file, and verifies a full before/after backup before moving any blocks. Registered/unregistered cards use the configured markers; card contents, identifiers, order, YAML and line endings are retained. Only blank gaps at removal sites collapse to a single newline. Cards are inserted before the first top-level footnote definition outside code fences (everything from that definition onward remains in place). With no footnotes, cards go at EOF.
+
+This changes source files, not just display. Keep in place does not restore old positions. Cards render at their actual positions in both settings; typing, rendering, startup and installation never relocate notes. Use **Collect cards again** for new cards. Upgrading an old virtual-collection setting requires fresh confirmation and temporarily uses Keep in place.
+
+Backups are written to `<configDir>/plugins/anki-card-manager/placement-migration.json` and retained in `placement-backups/` after completion/recovery. Every source write checks the original snapshot; failures restore only unchanged migrated files. Concurrent edits/missing files are untouched and leave automation paused until **Recover card placement** succeeds. A unique commit stamp distinguishes completed moves from interrupted repeat collections, so recovery never rolls back post-commit edits. Keep independent backups and avoid editing during the move. Backup JSON contains private note content and is not automatically deleted.
 
 ### Saving triggers and migrating the vault
 
@@ -162,7 +172,7 @@ Successful or restored migrations retain their backup under `<configDir>/plugins
 
 ## Privacy, network access, and platform support
 
-The plugin works locally, makes no network requests, sends no telemetry, and reads or writes only Markdown files, plugin settings and trigger-migration backups inside the current vault. Settings are stored in the plugin's `data.json`; migration backups contain affected note contents inside the plugin folder. It does not read files outside the vault.
+The plugin works locally, makes no network requests, sends no telemetry, and reads or writes only Markdown files, plugin settings and trigger/placement migration backups inside the current vault. Settings are stored in the plugin's `data.json`; migration backups contain affected note contents inside the plugin folder. It does not read files outside the vault.
 
 `isDesktopOnly` is `false`. The editor card renderer and responsive manager are implemented with Obsidian APIs and browser-compatible code for desktop and mobile.
 
@@ -195,7 +205,9 @@ Manager tests also cover deck/tag semantics, field/type search, focus/caret/IME 
 
 Additional regressions cover type menus and live-editor registration, Cloze unwrapping, custom triggers across all consumers, draft settings, simultaneous literal replacement, durable backups, write/settings failures, concurrent-edit protection, and recovery after restart. Card types, separators and icon assignments are centralized in `src/cardTypes.ts` for future extension.
 
-For browser layout checks, run `npm run test:browser` and open the printed editor or `/manager` URL. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
+Source/Live Preview transitions, Reading-view section boundaries/lifecycle, bottom-entry ArrowUp, physical collection/idempotence/footnotes, placement confirmation/recovery, independent group sampling modes, comma and global AND/OR search, and modal source navigation have regression coverage. Tests use sample documents, never real Vault notes.
+
+For browser layout checks, run `npm run test:browser` and open the printed editor, `/manager`, or `/reading` URL. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
 
 ## License
 

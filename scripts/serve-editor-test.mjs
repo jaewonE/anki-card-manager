@@ -24,6 +24,10 @@ const manager = await build({
 	entryPoints: [root + 'tests/browser/manager.ts'], bundle: true, write: false, format: 'iife',
 	alias: { obsidian: root + 'tests/support/obsidianMock.ts' },
 });
+const reading = await build({
+	entryPoints: [root + 'tests/browser/reading.ts'], bundle: true, write: false, format: 'iife',
+	alias: { obsidian: root + 'tests/support/obsidianMock.ts' },
+});
 const html = `<!doctype html><html lang="ko"><meta charset="utf-8"><title>Anki editor regression</title>
 <style>
 :root { --color-yellow:#d19b17; --background-primary:#fff; --background-secondary:#f5f5f5; --background-modifier-border:#ddd;
@@ -39,7 +43,7 @@ ${stylesheet}
 </style><body><h1>Anki editor regression</h1><p>Real CodeMirror 6.43.9; Obsidian host APIs are stubbed. No Vault files are accessed.</p>
 <nav><button id="outside">Blur editor</button><label>Placement <select id="placement"><option value="inline">Inline</option><option value="document-end">Document end</option></select></label>
 <button id="stress">Run 50 edit cycles</button><button id="disable">Disable extension</button><button id="enable">Enable extension</button>
-<label><input id="truncate" type="checkbox">Single-line titles</label><label><input id="dark" type="checkbox">Dark mode</label><button id="below">Cursor below stack</button></nav>
+<label><input id="truncate" type="checkbox">Single-line titles</label><label><input id="raw" type="checkbox">Source mode</label><label><input id="dark" type="checkbox">Dark mode</label><button id="below">Cursor below stack</button></nav>
 <output id="status"></output><output id="stress-result">Ready</output><div id="editor"></div><script src="/editor.js"></script></body></html>`;
 
 createServer((request, response) => {
@@ -47,7 +51,8 @@ createServer((request, response) => {
 	const managerHtml = html.slice(0, html.indexOf('<body>')) + `<body><style>
 	body{max-width:1400px}*{box-sizing:border-box}button,input,select,textarea{font:inherit;color:var(--text-normal);background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:5px;padding:7px}button:disabled{opacity:.4}button{cursor:pointer}input[type=checkbox]{width:16px;height:16px}svg{width:18px;height:18px}button svg{display:block}:root{--text-on-accent:#fff;--color-green:#398851;--text-error:#d84c4c;--text-faint:#888}.modal{position:fixed;z-index:100;left:50%;top:50%;transform:translate(-50%,-50%);max-height:90vh;overflow:auto;background:var(--background-primary);padding:24px;box-shadow:0 0 0 200vmax #0008;border:1px solid var(--background-modifier-border);border-radius:10px}.modal-button-container{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}pre{white-space:pre-wrap}
 	</style><p>Manager UI regression · Real manager code, sample documents and stubbed Obsidian APIs.</p><label><input id="dark" type="checkbox">Dark mode</label><output id="manager-status"></output><div id="manager"></div><details><summary>Inspect sample source files</summary><div id="sample-sources"></div></details><script src="/manager.js"></script></body></html>`;
-	response.end(request.url === '/editor.js' ? result.outputFiles[0].text : request.url === '/manager.js' ? manager.outputFiles[0].text : request.url === '/manager' ? managerHtml : html);
+	const readingHtml = managerHtml.slice(0, managerHtml.indexOf('<p>Manager UI regression')) + `<h1>Reading view regression</h1><p>Sample-only reading sections and confirmed collection. No real Vault access.</p><label><input id="dark" type="checkbox">Dark mode</label><button id="collect">Collect sample cards</button><output id="reading-status"></output><div id="reading" class="markdown-preview-view"></div><details><summary>Inspect sample source</summary><pre id="reading-source"></pre></details><script src="/reading.js"></script></body></html>`;
+	response.end(request.url === '/editor.js' ? result.outputFiles[0].text : request.url === '/manager.js' ? manager.outputFiles[0].text : request.url === '/reading.js' ? reading.outputFiles[0].text : request.url === '/manager' ? managerHtml : request.url === '/reading' ? readingHtml : html);
 }).listen(0, '127.0.0.1', function () {
 	console.log(`Editor QA: http://127.0.0.1:${this.address().port}`);
 	console.log(`Manager QA: http://127.0.0.1:${this.address().port}/manager`);

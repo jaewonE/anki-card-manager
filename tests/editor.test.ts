@@ -113,6 +113,7 @@ for (const [version, packageName] of [
 					selection: { anchor },
 					extensions: [
 						harness.editorInfoField,
+						harness.editorLivePreviewField,
 						harness.createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles, () => markers, () => blocked),
 						cm.EditorView.exceptionSink.of((error) => errors.push(error)),
 					],
@@ -129,6 +130,46 @@ for (const [version, packageName] of [
 			assert.deepEqual(errors, [], 'no editor, layout, async render or focus errors');
 		});
 		after(() => dom.window.close());
+
+		test('Source mode never replaces raw text, including after blur or placement changes', async () => {
+			const editor = open(documentText, 0);
+			await settle();
+			assert.equal(editor.dom.querySelectorAll('details').length, 1);
+			editor.dispatch({ effects: harness.setLivePreview.of(false) });
+			outside.focus(); placement = 'document-end'; editor.dispatch({}); await settle();
+			assert.equal(editor.dom.querySelectorAll('details').length, 0);
+			assert.ok(editor.contentDOM.textContent?.includes('<START_ANKI>'));
+			assert.equal(editor.state.doc.toString(), documentText);
+			editor.dispatch({ effects: harness.setLivePreview.of(true) }); await settle();
+			assert.equal(editor.dom.querySelectorAll('details').length, 1);
+		});
+
+		test('ArrowUp below a stack enters the last closing marker at any column without editing', async () => {
+			const source = `intro\n${card}\n\n${card}\nTAIL`;
+			const last = parseAnkiCards(source)[1]!;
+			const editor = open(source, source.length);
+			editor.focus(); await settle();
+			const key = new dom.window.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+			editor.contentDOM.dispatchEvent(key); await settle();
+			assert.equal(key.defaultPrevented, true);
+			assert.equal(editor.state.selection.main.head, editor.state.doc.line(last.endLine + 1).to);
+			assert.equal(editor.state.doc.toString(), source);
+			assert.ok(editor.contentDOM.textContent?.includes('<END_ANKI>'));
+			assert.equal(editor.dom.querySelectorAll('details').length, 1, 'only the last card becomes source');
+		});
+
+		test('ArrowUp in a lower wrapped row below a card keeps ordinary vertical movement', async () => {
+			const source = `intro\n${card}\nlong trailing paragraph`;
+			const editor = open(source, source.length); editor.focus(); await settle();
+			const position = editor.state.selection.main.head;
+			const original = editor.coordsAtPos.bind(editor);
+			editor.coordsAtPos = (pos) => ({ left: 0, right: 0, top: pos === position ? 40 : 0, bottom: pos === position ? 60 : 20 });
+			const key = new dom.window.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
+			editor.contentDOM.dispatchEvent(key);
+			editor.coordsAtPos = original;
+			assert.equal(key.defaultPrevented, false);
+			assert.equal(editor.state.doc.toString(), source);
+		});
 
 		test('type menu converts Cloze text and status toggles through live editor transactions, keeping the card open', async () => {
 			const source = 'intro\n<START_ANKI>\nCloze\nQuestion\nText:\n{{c1::**answer**}} {{c2:other}}\n<!--ID: 123-->\n<END_ANKI>\ntail';
@@ -257,11 +298,11 @@ for (const [version, packageName] of [
 			assert.ok(editor.state.selection.main.head < parsed.renderTo);
 		});
 
-		test('Backspace below document-end collection does not delete cards or trailing prose', async () => {
+		test('Backspace below physically placed collection reveals its actual source', async () => {
 			const source = `intro\n${card}\nTAIL`;
 			const editor = open(source, 0);
 			placement = 'document-end';
-			editor.dispatch({ selection: { anchor: source.length } });
+			editor.dispatch({ selection: { anchor: source.indexOf('TAIL') } });
 			editor.focus();
 			await settle();
 			editor.contentDOM.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }));
@@ -394,7 +435,7 @@ for (const [version, packageName] of [
 			placement = 'document-end';
 			editor.dispatch({});
 			await settle();
-			assert.equal(editor.dom.querySelectorAll('.is-document-end details').length, 2);
+			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-stack details').length, 2);
 			editor.dispatch({ changes: { from: 0, insert: 'new text\n' } });
 			await settle();
 			const expected = parseAnkiCards(editor.state.doc.toString())[1]!.from;

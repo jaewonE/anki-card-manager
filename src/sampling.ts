@@ -42,7 +42,7 @@ function rateQuotas(target: number, shares: number[]): number[] {
 
 /** Pure selection operation: errors never partially change the manager's selection or files. */
 export function sampleCards(selected: readonly AnkiCard[], mode: SamplingMode, value: number,
-	allocations: readonly GroupAllocation[] = []): AnkiCard[] {
+	allocations: readonly GroupAllocation[] = [], groupMode: SamplingMode = mode): AnkiCard[] {
 	const ranked = shuffled(selected);
 	if (!ranked.length) throw new Error('Select at least one card before sampling.');
 	if (!Number.isFinite(value) || value <= 0) throw new Error('Sampling must be a positive number.');
@@ -54,15 +54,15 @@ export function sampleCards(selected: readonly AnkiCard[], mode: SamplingMode, v
 	const groups = [...allocations].sort((a, b) => compareKeys(a.key, b.key));
 	for (const group of groups) {
 		if (!Number.isFinite(group.value) || group.value < 0 ||
-			(mode === 'count' ? !Number.isSafeInteger(group.value) : group.value > 100)) {
-			throw new Error(`Invalid sampling allocation for ${group.label}. Use ${mode === 'count' ? 'a non-negative integer' : 'a percentage from 0 to 100'}.`);
+			(groupMode === 'count' ? !Number.isSafeInteger(group.value) : group.value > 100)) {
+			throw new Error(`Invalid sampling allocation for ${group.label}. Use ${groupMode === 'count' ? 'a non-negative integer' : 'a percentage from 0 to 100'}.`);
 		}
 	}
 	const total = groups.reduce((sum, group) => sum + group.value, 0);
-	if (total > (mode === 'count' ? target : 100) + 1e-9) {
-		throw new Error(`Group allocations must total at most ${mode === 'count' ? `${target} cards` : '100%'}.`);
+	if (total > (groupMode === 'count' ? target : 100) + 1e-9) {
+		throw new Error(`Group allocations must total at most ${groupMode === 'count' ? `${target} cards` : '100%'}.`);
 	}
-	const quotas = mode === 'count' ? groups.map((group) => group.value) : rateQuotas(target, groups.map((group) => group.value));
+	const quotas = groupMode === 'count' ? groups.map((group) => group.value) : rateQuotas(target, groups.map((group) => group.value));
 	const selectedKeys = new Set(ranked.map((card) => card.key));
 	const reserved = new Set<string>();
 	const pools = groups.map((group, index) => {

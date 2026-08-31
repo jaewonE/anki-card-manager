@@ -3,42 +3,46 @@ import type { Extension, StateEffectType, Transaction } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import { parseAnkiCards } from './parser';
-import type { AnkiCard, CardPlacement } from './types';
+import type { AnkiCard } from './types';
 import { DEFAULT_MARKERS } from './markers';
 import type { CardMarkers } from './markers';
 
 export function protectCardDeletion(
 	getDecorations: (state: EditorState) => DecorationSet,
 	focusEffect: StateEffectType<boolean>,
-	getPlacement: () => CardPlacement,
 	getMarkers: () => CardMarkers = () => DEFAULT_MARKERS,
 ): Extension {
-	function target(state: EditorState, backward: boolean, transaction?: Transaction): AnkiCard | undefined {
+	function target(state: EditorState, backward: boolean, transaction?: Transaction, vertical = false): AnkiCard | undefined {
 		if (state.selection.ranges.length !== 1 || !state.selection.main.empty) return;
 		const position = state.selection.main.head;
 		const cards = parseAnkiCards(state.doc.toString(), '', undefined, getMarkers());
 		let result: AnkiCard | undefined;
-		const atCollection = backward && getPlacement() === 'document-end' && position === state.doc.length &&
-			!cards.some((card) => position >= card.renderFrom && position <= card.renderTo);
 		getDecorations(state).between(0, state.doc.length, (from, to) => {
 			if (from === to) return;
 			const adjacent = backward
 				? position >= to && position <= to + 1 && /^\s*$/.test(state.doc.sliceString(to, position))
 				: position <= from && position >= from - 1 && /^\s*$/.test(state.doc.sliceString(position, from));
+			const line = state.doc.lineAt(position);
+			const above = vertical && position >= to && to >= line.from - 1 && to <= line.to;
 			let intersectsDeletion = false;
 			transaction?.changes.iterChangedRanges((changeFrom, changeTo) => {
 				if (changeFrom < to && changeTo > from) intersectsDeletion = true;
 			});
-			if (!adjacent && !atCollection && !intersectsDeletion) return;
+			if (!adjacent && !above && !intersectsDeletion) return;
 			const hidden = cards.filter((card) => card.renderFrom >= from && card.renderTo <= to);
 			const candidate = backward ? hidden[hidden.length - 1] : hidden[0];
 			if (candidate && (!result || (backward ? candidate.from > result.from : candidate.from < result.from))) result = candidate;
 		});
 		return result;
 	}
-	function reveal(view: EditorView, backward: boolean): boolean {
-		const card = target(view.state, backward);
+	function reveal(view: EditorView, backward: boolean, vertical = false): boolean {
+		const card = target(view.state, backward, undefined, vertical);
 		if (!card) return false;
+		if (vertical) {
+			const cursor = view.coordsAtPos(view.state.selection.main.head);
+			const firstRow = view.coordsAtPos(view.state.doc.lineAt(view.state.selection.main.head).from);
+			if (cursor && firstRow && cursor.top > firstRow.top + 1) return false;
+		}
 		view.dispatch({
 			selection: { anchor: backward ? view.state.doc.line(card.endLine + 1).to : card.from },
 			effects: focusEffect.of(true),
@@ -49,6 +53,7 @@ export function protectCardDeletion(
 	}
 	return [
 		Prec.highest(keymap.of([
+			{ key: 'ArrowUp', run: (view) => reveal(view, true, true) },
 			{ key: 'Backspace', run: (view) => reveal(view, true) },
 			{ key: 'Delete', run: (view) => reveal(view, false) },
 		])),

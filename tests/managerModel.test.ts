@@ -12,6 +12,23 @@ const a = card('a.md', 'Mother::Child', ['Inbox', 'Study/UML']);
 const b = card('b.md', 'Mother::Other', ['Inbox']);
 const c = card('c.md', 'Mother', []);
 
+test('comma values and separately listed terms share the global AND/OR mode', () => {
+	assert.deepEqual(parseSearch('tag: Inbox, Study/UML type: Cloze, Obsidian-Basic'), [
+		{ property: 'tag', value: 'Inbox' }, { property: 'tag', value: 'Study/UML' },
+		{ property: 'type', value: 'Cloze' }, { property: 'type', value: 'Obsidian-Basic' },
+	]);
+	for (const mode of ['and', 'or'] as const) {
+		assert.equal(matchesSearch(a, parseSearch('tag: Inbox, missing'), mode), matchesSearch(a, parseSearch('tag:Inbox tag:missing'), mode));
+		assert.equal(matchesSearch(a, parseSearch('tag: Inbox, missing'), mode), mode === 'or');
+		assert.equal(matchesSearch(a, parseSearch('deck:Sibling type:Cloze'), mode), mode === 'or');
+		assert.equal(matchesSearch(a, parseSearch('uml nonexistent'), mode), mode === 'or');
+		assert.equal(matchesSearch(a, [], mode), true);
+	}
+	assert.equal(matchesSearch(a, parseSearch('tag:in box, STUDY / UML')), true);
+	assert.equal(matchesSearch(a, parseSearch('type:Basic, Cloze'), 'or'), true);
+	assert.deepEqual(parseSearch('front:Hello, world'), [{ property: 'front', value: 'Hello, world' }]);
+});
+
 test('deck hierarchy owns each card once; tags are flat independent labels', () => {
 	const roots = groupCards([a, b, c], true, false);
 	assert.equal(roots.length, 1);

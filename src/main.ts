@@ -1,4 +1,4 @@
-import { Notice, Plugin } from 'obsidian';
+import { MarkdownView, Notice, Plugin } from 'obsidian';
 import { AnkiCardAutoCompleter } from './autocomplete';
 import { createAnkiCardEditorExtension } from './editorExtension';
 import {
@@ -11,6 +11,10 @@ import type { CardMarkers } from './markers';
 import { CARD_TYPES } from './cardTypes';
 import { VaultTriggerJournal } from './triggerJournal';
 import { migrateTriggers, recoverTriggers } from './triggerMigration';
+import { VaultPlacementJournal } from './placementJournal';
+import { migratePlacement, recoverPlacement } from './placementMigration';
+import type { PlacementState } from './placementMigration';
+import { createReadingPostProcessor } from './readingView';
 import {
 	ANKI_MANAGER_VIEW_TYPE,
 	AnkiManagerView,
@@ -20,14 +24,18 @@ export default class AnkiCardManagerPlugin extends Plugin {
 	settings!: AnkiCardManagerSettings;
 	private autoCompleter!: AnkiCardAutoCompleter;
 	private triggerJournal!: VaultTriggerJournal;
+	private placementJournal!: VaultPlacementJournal;
 	migrationBlocked = false;
 	migrationBusy = false;
+	triggerRecoveryPending = false;
+	placementRecoveryPending = false;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.triggerJournal = new VaultTriggerJournal(this.app, this.manifest.id);
+		this.placementJournal = new VaultPlacementJournal(this.app, this.manifest.id);
 		this.migrationBlocked = await this.hasPendingMigration();
-		if (this.migrationBlocked) new Notice('Unfinished trigger migration: open Anki card manager settings to recover. Card automation is paused.', 10000);
+		if (this.migrationBlocked) new Notice('Unfinished card migration: open Anki card manager settings to recover. Card automation is paused.', 10000);
 		this.autoCompleter = new AnkiCardAutoCompleter(
 			this.app,
 			() => this.settings,
@@ -47,6 +55,8 @@ export default class AnkiCardManagerPlugin extends Plugin {
 				() => this.migrationBlocked,
 			),
 		);
+		this.registerMarkdownPostProcessor(createReadingPostProcessor(this.app, () => this.settings,
+			() => this.migrationBlocked, () => this.refreshEditorDecorations()));
 		this.registerEvent(
 			this.app.workspace.on('editor-change', (editor, info) => {
 				void this.autoCompleter.onEditorChange(editor, info);
@@ -70,6 +80,7 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		});
 
 		this.addSettingTab(new AnkiCardManagerSettingTab(this.app, this));
+		this.app.workspace.onLayoutReady(() => this.refreshEditorDecorations());
 	}
 
 	async loadSettings(): Promise<void> {
@@ -82,6 +93,10 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		try { validateMarkers(this.settings.markers); }
 		catch { this.settings.markers = { ...DEFAULT_MARKERS }; new Notice('Invalid trigger settings; using default triggers. No files were changed.'); }
 		if (!CARD_TYPES.some((type) => type.name === this.settings.defaultCardType)) this.settings.defaultCardType = 'Obsidian-Basic';
+		if (this.settings.cardPlacement === 'document-end' && !this.settings.placementMigrationId) {
+			this.settings.cardPlacement = 'inline';
+			new Notice('Collect at document end now moves source files. Keep in place is active until you confirm collection in settings. No notes were moved.', 10000);
+		}
 	}
 
 	async saveSettings(): Promise<void> {
@@ -90,11 +105,17 @@ export default class AnkiCardManagerPlugin extends Plugin {
 
 	refreshEditorDecorations(): void {
 		this.app.workspace.updateOptions();
+		for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
+			if (leaf.view instanceof MarkdownView && leaf.view.getMode() === 'preview') leaf.view.previewMode.rerender(true);
+		}
 	}
 
 	private async hasPendingMigration(): Promise<boolean> {
-		try { return Boolean(await this.triggerJournal.read()); }
-		catch { return true; }
+		try { this.triggerRecoveryPending = Boolean(await this.triggerJournal.read()); }
+		catch { this.triggerRecoveryPending = true; }
+		try { this.placementRecoveryPending = Boolean(await this.placementJournal.read()); }
+		catch { this.placementRecoveryPending = true; }
+		return this.triggerRecoveryPending || this.placementRecoveryPending;
 	}
 
 	private async persistMarkers(markers: CardMarkers): Promise<void> {
@@ -103,6 +124,7 @@ export default class AnkiCardManagerPlugin extends Plugin {
 	}
 
 	async applyTriggers(markers: CardMarkers): Promise<void> {
+		if (this.migrationBlocked) throw new Error('Recover the unfinished migration first.');
 		await this.runMigration(async () => {
 			const result = await migrateTriggers(this.app, this.settings.markers, markers, this.triggerJournal,
 				(value) => this.persistMarkers(value));
@@ -117,8 +139,35 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		});
 	}
 
+	private placementState(): PlacementState {
+		return { cardPlacement: this.settings.cardPlacement, placementMigrationId: this.settings.placementMigrationId ?? '' };
+	}
+	private async persistPlacement(value: PlacementState): Promise<void> {
+		await this.saveData({ ...this.settings, ...value });
+		Object.assign(this.settings, value);
+	}
+	async keepCardsInPlace(): Promise<void> {
+		if (this.migrationBlocked) throw new Error('Recover the unfinished migration first.');
+		await this.persistPlacement({ ...this.placementState(), cardPlacement: 'inline' });
+		this.refreshEditorDecorations();
+	}
+	async collectCards(): Promise<void> {
+		if (this.migrationBlocked) throw new Error('Recover the unfinished migration first.');
+		await this.runMigration(async () => {
+			const result = await migratePlacement(this.app, this.placementState(), this.settings.markers,
+				this.placementJournal, (value) => this.persistPlacement(value));
+			new Notice(`Cards collected in ${result.files} Markdown files. Backup: ${result.backup}`, 10000);
+		});
+	}
+	async recoverCardPlacement(): Promise<void> {
+		await this.runMigration(async () => {
+			const backup = await recoverPlacement(this.app, this.placementJournal, this.placementState(), (value) => this.persistPlacement(value));
+			new Notice(`Card placement recovery completed. Backup: ${backup}`, 10000);
+		});
+	}
+
 	private async runMigration(action: () => Promise<void>): Promise<void> {
-		if (this.migrationBusy) throw new Error('A trigger migration is already running.');
+		if (this.migrationBusy) throw new Error('A card migration is already running.');
 		this.migrationBusy = this.migrationBlocked = true;
 		try { await this.refreshViews(); await action(); }
 		finally {

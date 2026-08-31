@@ -34,6 +34,16 @@ test('Count allocation 6 plus remainder 4 produces exactly ten selected cards', 
 	assert.equal(countIn(result, group), 6); assert.equal(result.length, 10);
 });
 
+test('global Count with group Rate 30/40/30 produces 3/4/3; global Rate also accepts group Count', () => {
+	const groups = [cards.slice(0, 30), cards.slice(30, 60), cards.slice(60)];
+	const result = sampleCards(cards, 'count', 10, groups.map((group, index) => allocation(String(index), [30, 40, 30][index]!, group)), 'rate');
+	assert.deepEqual(groups.map((group) => countIn(result, group)), [3, 4, 3]);
+	const inverse = sampleCards(cards, 'rate', 10, [allocation('a', 6, groups[0]!)], 'count');
+	assert.equal(countIn(inverse, groups[0]!), 6); assert.equal(inverse.length, 10);
+	assert.throws(() => sampleCards(cards, 'count', 10, [allocation('a', 101, cards)], 'rate'));
+	assert.throws(() => sampleCards(cards, 'rate', 10, [allocation('a', 11, cards)], 'count'), /at most 10/);
+});
+
 test('Rate 30% with a 50% group share draws 15 group cards and 15 outside it', () => {
 	const group = cards.slice(0, 30);
 	const result = sampleCards(cards, 'rate', 30, [allocation('group', 50, group)]);

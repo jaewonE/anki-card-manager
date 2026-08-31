@@ -4,6 +4,7 @@ import { deleteCard, updateCard } from '../cardActions';
 import { cardPreview } from '../parser';
 import type { AnkiCard, CardEdit } from '../types';
 import { CARD_TYPES } from '../cardTypes';
+import { openCardSource } from '../sourceNavigation';
 
 export class EditCardModal extends Modal {
 	private edit: CardEdit;
@@ -41,11 +42,13 @@ export class EditCardModal extends Modal {
 			this.edit.back = value;
 		});
 
-		const source = this.contentEl.createDiv({
+		const source = this.contentEl.createEl('button', {
 			cls: 'anki-card-manager-modal-source',
 			text: `${this.card.sourcePath}:${this.card.startLine + 1}`,
+			attr: { type: 'button', 'aria-label': 'Open card source file' },
 		});
-		source.setAttr('title', this.card.sourcePath);
+		source.setAttr('title', 'Open source file (unsaved dialog edits are discarded)');
+		source.addEventListener('click', () => { void openCardSource(this.app, this.card).then((opened) => { if (opened) this.close(); }); });
 
 		const actions = this.contentEl.createDiv({ cls: 'modal-button-container' });
 		new ButtonComponent(actions).setButtonText('Cancel').onClick(() => this.close());

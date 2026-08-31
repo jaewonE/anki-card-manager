@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view';
 import type { App } from 'obsidian';
 import { createAnkiCardEditorExtension } from '../../src/editorExtension';
 import type { CardPlacement } from '../../src/types';
-import { editorInfoField } from '../support/obsidianMock';
+import { editorInfoField, editorLivePreviewField, setLivePreview } from '../support/obsidianMock';
 import { parseAnkiCards } from '../../src/parser';
 
 function create(tag: string, options: DomElementInfo = {}): HTMLElement {
@@ -42,7 +42,7 @@ window.addEventListener('error', () => { errors += 1; updateStatus(); });
 window.addEventListener('unhandledrejection', () => { errors += 1; updateStatus(); });
 
 function extensions() {
-	return [editorInfoField, createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles),
+	return [editorInfoField, editorLivePreviewField, createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles),
 		EditorView.lineWrapping,
 		EditorView.updateListener.of(() => queueMicrotask(updateStatus)),
 		EditorView.exceptionSink.of((error) => { errors += 1; console.error(error); updateStatus(); }),
@@ -73,6 +73,9 @@ document.querySelector('#stress')!.addEventListener('click', () => { void stress
 document.querySelector('#truncate')!.addEventListener('change', (event) => {
 	truncateTitles = (event.target as HTMLInputElement).checked;
 	view.dispatch({});
+});
+document.querySelector('#raw')!.addEventListener('change', (event) => {
+	view.dispatch({ effects: setLivePreview.of(!(event.target as HTMLInputElement).checked) });
 });
 document.querySelector('#dark')!.addEventListener('change', (event) => {
 	document.body.classList.toggle('theme-dark', (event.target as HTMLInputElement).checked);

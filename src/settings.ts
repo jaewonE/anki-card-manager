@@ -1,12 +1,14 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import type AnkiCardManagerPlugin from './main';
-import type { AnkiCardManagerSettings, CardPlacement } from './types';
+import type { AnkiCardManagerSettings } from './types';
 import { DEFAULT_MARKERS } from './markers';
 import { CARD_TYPES } from './cardTypes';
 import { renderTriggerSettings } from './ui/triggerSettings';
+import { renderPlacementSettings } from './ui/placementSettings';
 
 export const DEFAULT_SETTINGS: AnkiCardManagerSettings = {
 	cardPlacement: 'inline',
+	placementMigrationId: '',
 	truncateTitles: false,
 	autoCompleteCards: true,
 	defaultCardType: 'Obsidian-Basic',
@@ -27,22 +29,7 @@ export class AnkiCardManagerSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl)
-			.setName('Card placement')
-			.setDesc(
-				'Keep rendered cards at their source position, or collect them at the end of the current document.',
-			)
-			.addDropdown((dropdown) =>
-				dropdown
-					.addOption('inline', 'Keep in place')
-					.addOption('document-end', 'Collect at document end')
-					.setValue(this.plugin.settings.cardPlacement)
-					.onChange(async (value) => {
-						this.plugin.settings.cardPlacement = value as CardPlacement;
-						await this.plugin.saveSettings();
-						this.plugin.refreshEditorDecorations();
-					}),
-			);
+		renderPlacementSettings(containerEl, this.plugin, () => this.display());
 
 		new Setting(containerEl)
 			.setName('Single-line titles')
