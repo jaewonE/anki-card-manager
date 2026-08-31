@@ -219,6 +219,9 @@
 	gap: 5px;
 	font-size: var(--font-ui-smaller);
 	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 5px;
 	padding: 3px 7px;
 	height: auto;
 	box-shadow: none;
