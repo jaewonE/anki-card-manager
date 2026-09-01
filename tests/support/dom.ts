@@ -10,6 +10,9 @@ export function installDomHelpers(win: Window & typeof globalThis): void {
 		return this.appendChild(element);
 	} as HTMLElement['createEl'];
 	win.HTMLElement.prototype.createDiv = function (options?: DomElementInfo) { return this.createEl('div', options); };
+	win.HTMLElement.prototype.setCssProps = function (properties: Record<string, string>) {
+		for (const [property, value] of Object.entries(properties)) this.style.setProperty(property, value);
+	};
 	win.HTMLElement.prototype.createSpan = function (options?: DomElementInfo) { return this.createEl('span', options); };
 	win.HTMLElement.prototype.addClass = function (...classes: string[]) { this.classList.add(...classes); };
 	win.HTMLElement.prototype.empty = function () { this.replaceChildren(); };

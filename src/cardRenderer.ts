@@ -12,6 +12,8 @@ export interface CardRenderOptions extends CardControlActions {
 	truncateTitle?: boolean;
 	onSizeChange?: () => void;
 	onEdit?: () => void;
+	initiallyOpen?: boolean;
+	onOpenChange?: (open: boolean) => void;
 }
 
 export function renderAnkiCard(
@@ -42,6 +44,20 @@ export function renderAnkiCard(
 		card.sourcePath,
 		component,
 	);
+	const watchRenderedSize = (render: Promise<void>, root: HTMLElement): void => {
+		void render
+			.then(() => {
+				options.onSizeChange?.();
+				for (const image of Array.from(root.querySelectorAll<HTMLImageElement>('img'))) {
+					if (!image.complete) image.addEventListener('load', () => options.onSizeChange?.(), { once: true });
+				}
+			})
+			.catch((error: unknown) => {
+				console.error('Anki Card Manager: failed to render card Markdown', error);
+				options.onSizeChange?.();
+			});
+	};
+	watchRenderedSize(questionRender, question);
 
 	if (options.onEdit) {
 		const edit = summary.createEl('button', {
@@ -56,43 +72,43 @@ export function renderAnkiCard(
 		});
 	}
 
-	const answer = details.createDiv({ cls: 'anki-card-manager-answer' });
-	const answerHeader = answer.createDiv({ cls: 'anki-card-manager-answer-header' });
-	renderCardControls(answerHeader, card, component, options);
-	const answerContent = answer.createDiv({
-		cls: 'anki-card-manager-answer-content',
+	let metadata: HTMLDivElement | undefined;
+	let answerStarted = false;
+	const renderAnswer = (): void => {
+		if (answerStarted) return;
+		answerStarted = true;
+		const answer = details.createDiv({ cls: 'anki-card-manager-answer' });
+		if (metadata) details.insertBefore(answer, metadata);
+		const answerHeader = answer.createDiv({ cls: 'anki-card-manager-answer-header' });
+		renderCardControls(answerHeader, card, component, options);
+		const answerContent = answer.createDiv({ cls: 'anki-card-manager-answer-content' });
+		const answerRender = card.cardType === 'Cloze'
+			? renderClozeAnswer(app, card.back, answerContent, answerHeader, details, card.sourcePath, component, options.onSizeChange)
+			: MarkdownRenderer.render(
+				app,
+				card.back || '*Empty answer*',
+				answerContent,
+				card.sourcePath,
+				component,
+			);
+		watchRenderedSize(answerRender, answer);
+	};
+	details.addEventListener('toggle', () => {
+		options.onOpenChange?.(details.open);
+		if (details.open) renderAnswer();
+		options.onSizeChange?.();
 	});
-	const answerRender = card.cardType === 'Cloze'
-		? renderClozeAnswer(app, card.back, answerContent, answerHeader, details, card.sourcePath, component, options.onSizeChange)
-		: MarkdownRenderer.render(
-		app,
-		card.back || '*Empty answer*',
-		answerContent,
-		card.sourcePath,
-		component,
-	);
-	details.addEventListener('toggle', () => options.onSizeChange?.());
-	void Promise.all([questionRender, answerRender])
-		.then(() => {
-			options.onSizeChange?.();
-			for (const image of Array.from(details.querySelectorAll<HTMLImageElement>('img'))) {
-				if (!image.complete) {
-					image.addEventListener('load', () => options.onSizeChange?.(), {
-						once: true,
-					});
-				}
-			}
-		})
-		.catch((error: unknown) => {
-			console.error('Anki Card Manager: failed to render card Markdown', error);
-			options.onSizeChange?.();
-		});
 
 	if (options.showSource) {
-		const metadata = details.createDiv({ cls: 'anki-card-manager-card-metadata' });
+		metadata = details.createDiv({ cls: 'anki-card-manager-card-metadata' });
 		metadata.createSpan({ text: card.deck || 'No deck' });
 		metadata.createSpan({ text: card.tags.join(' · ') || 'No tags' });
 		metadata.createSpan({ text: `${card.sourcePath}:${card.startLine + 1}` });
+	}
+	if (options.initiallyOpen) {
+		details.open = true;
+		options.onOpenChange?.(true);
+		renderAnswer();
 	}
 
 	return details;

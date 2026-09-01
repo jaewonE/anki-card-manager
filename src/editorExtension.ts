@@ -3,7 +3,7 @@ import {
 	StateEffect,
 	StateField,
 } from '@codemirror/state';
-import type { Extension } from '@codemirror/state';
+import type { Extension, Text } from '@codemirror/state';
 import {
 	Decoration,
 	EditorView,
@@ -14,7 +14,7 @@ import { editorInfoField, editorLivePreviewField } from 'obsidian';
 import type { App } from 'obsidian';
 import { AnkiCardsWidget } from './editorWidgets';
 import { parseAnkiCards } from './parser';
-import { groupAdjacentCards } from './cardGrouping';
+import { chunkAdjacentCards } from './cardChunks';
 import { protectCardDeletion } from './editorDeletion';
 import type { AnkiCard, CardPlacement } from './types';
 import { DEFAULT_MARKERS, sameMarkers } from './markers';
@@ -22,12 +22,42 @@ import type { CardMarkers } from './markers';
 
 interface AnkiDecorationState {
 	decorations: DecorationSet;
+	parsed?: ParsedEditorCards;
 	editorFocused: boolean;
 	placement: CardPlacement;
 	truncateTitles: boolean;
 	markers: CardMarkers;
 	blocked: boolean;
 	livePreview: boolean;
+}
+
+interface ParsedEditorCards {
+	doc: Text;
+	source: string;
+	sourcePath: string;
+	cards: AnkiCard[];
+}
+
+type ParseCards = typeof parseAnkiCards;
+
+function parseEditorCards(state: EditorState, markers: CardMarkers, parseCards: ParseCards): ParsedEditorCards {
+	const source = state.doc.toString();
+	const sourcePath = state.field(editorInfoField, false)?.file?.path ?? '';
+	return {
+		doc: state.doc,
+		source,
+		sourcePath,
+		cards: parseCards(source, sourcePath, undefined, markers),
+	};
+}
+
+function safeParseEditorCards(state: EditorState, markers: CardMarkers, parseCards: ParseCards): ParsedEditorCards | undefined {
+	try {
+		return parseEditorCards(state, markers, parseCards);
+	} catch (error) {
+		console.error('Anki Card Manager: card parsing was disabled for this editor', error);
+		return undefined;
+	}
 }
 
 function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
@@ -41,27 +71,22 @@ function selectionTouchesCard(state: EditorState, card: AnkiCard): boolean {
 function buildDecorations(
 	state: EditorState,
 	app: App,
+	parsed: ParsedEditorCards,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
-	markers: CardMarkers,
 ): DecorationSet {
-	const sourcePath = state.field(editorInfoField, false)?.file?.path ?? '';
-	const cards = parseAnkiCards(state.doc.toString(), sourcePath, undefined, markers);
 	const ranges = [];
 
-	const visibleCards = cards.filter((card) => renderFocusedCard || !selectionTouchesCard(state, card));
-	// Collection is a confirmed source migration, never a virtual footer.
-	const groups = groupAdjacentCards(state.doc.toString(), visibleCards);
-	for (const group of groups) {
-		const first = group[0];
-		const last = group[group.length - 1];
-		if (!first || !last) continue;
+	const visibleCards = parsed.cards.filter((card) => renderFocusedCard || !selectionTouchesCard(state, card));
+	// Collection is a confirmed source migration, never a virtual footer. Large
+	// semantic stacks are partitioned so CodeMirror can mount only nearby chunks.
+	for (const chunk of chunkAdjacentCards(parsed.source, visibleCards)) {
 		const decoration = Decoration.replace({
-			widget: new AnkiCardsWidget(app, group, false, truncateTitles),
+			widget: new AnkiCardsWidget(app, chunk.cards, false, truncateTitles, chunk.stackPosition),
 			block: true,
 			inclusive: false,
 		});
-		ranges.push(decoration.range(first.renderFrom, last.renderTo));
+		ranges.push(decoration.range(chunk.from, chunk.to));
 	}
 
 	return Decoration.set(ranges, true);
@@ -70,12 +95,13 @@ function buildDecorations(
 function safeBuildDecorations(
 	state: EditorState,
 	app: App,
+	parsed: ParsedEditorCards | undefined,
 	renderFocusedCard: boolean,
 	truncateTitles: boolean,
-	markers: CardMarkers,
 ): DecorationSet {
+	if (!parsed) return Decoration.none;
 	try {
-		return buildDecorations(state, app, renderFocusedCard, truncateTitles, markers);
+		return buildDecorations(state, app, parsed, renderFocusedCard, truncateTitles);
 	} catch (error) {
 		console.error('Anki Card Manager: card rendering was disabled for this editor', error);
 		return Decoration.none;
@@ -96,6 +122,7 @@ export function createAnkiCardEditorExtension(
 	getTruncateTitles: () => boolean = () => false,
 	getMarkers: () => CardMarkers = () => DEFAULT_MARKERS,
 	isBlocked: () => boolean = () => false,
+	parseCards: ParseCards = parseAnkiCards,
 ): Extension {
 	const focusEffect = StateEffect.define<boolean>();
 	const decorationField = StateField.define<AnkiDecorationState>({
@@ -105,8 +132,10 @@ export function createAnkiCardEditorExtension(
 			const markers = { ...getMarkers() };
 			const blocked = isBlocked();
 			const livePreview = state.field(editorLivePreviewField, false) !== false;
+			const parsed = blocked || !livePreview ? undefined : safeParseEditorCards(state, markers, parseCards);
 			return {
-				decorations: blocked || !livePreview ? Decoration.none : safeBuildDecorations(state, app, false, truncateTitles, markers),
+				decorations: blocked || !livePreview ? Decoration.none : safeBuildDecorations(state, app, parsed, false, truncateTitles),
+				parsed,
 				editorFocused: true,
 				placement,
 				truncateTitles,
@@ -123,6 +152,9 @@ export function createAnkiCardEditorExtension(
 			const markers = { ...getMarkers() };
 			const blocked = isBlocked();
 			const livePreview = transaction.state.field(editorLivePreviewField, false) !== false;
+			const sourcePath = transaction.state.field(editorInfoField, false)?.file?.path ?? '';
+			const markersChanged = !sameMarkers(markers, value.markers);
+			const sourcePathChanged = value.parsed !== undefined && value.parsed.sourcePath !== sourcePath;
 			const selectionChanged = !transaction.startState.selection.eq(
 				transaction.state.selection,
 			);
@@ -131,18 +163,26 @@ export function createAnkiCardEditorExtension(
 				!selectionChanged &&
 				editorFocused === value.editorFocused &&
 				placement === value.placement && truncateTitles === value.truncateTitles &&
-				blocked === value.blocked && livePreview === value.livePreview && sameMarkers(markers, value.markers)
+				blocked === value.blocked && livePreview === value.livePreview && !markersChanged && !sourcePathChanged
 			) {
 				return value;
 			}
+			const canReuseParsed = value.parsed !== undefined &&
+				value.parsed.doc === transaction.state.doc &&
+				value.parsed.sourcePath === sourcePath &&
+				!markersChanged;
+			const parsed = blocked || !livePreview
+				? value.parsed
+				: canReuseParsed ? value.parsed : safeParseEditorCards(transaction.state, markers, parseCards);
 			return {
 				decorations: blocked || !livePreview ? Decoration.none : safeBuildDecorations(
 					transaction.state,
 					app,
+					parsed,
 					!editorFocused,
 					truncateTitles,
-					markers,
 				),
+				parsed,
 				editorFocused,
 				placement,
 				truncateTitles,

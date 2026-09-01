@@ -21,6 +21,10 @@
 	width: 100%;
 }
 
+.anki-card-manager-editor-widget.has-card-height-estimate {
+	min-height: var(--anki-card-manager-estimated-height);
+}
+
 .anki-card-manager-editor-widget.is-document-end {
 	border-top: 1px solid var(--background-modifier-border);
 	padding-top: var(--size-4-8);
@@ -64,6 +68,46 @@
 
 .anki-card-manager-stack > .anki-card-manager-card:last-child {
 	border-bottom: 0;
+}
+
+/* A very large semantic stack is rendered as bounded widgets. Keep the
+   adjacent chunks visually continuous while CodeMirror virtualizes them. */
+.anki-card-manager-editor-widget.is-stack-start {
+	padding-bottom: 0;
+}
+
+.anki-card-manager-editor-widget.is-stack-middle {
+	padding-bottom: 0;
+	padding-top: 0;
+}
+
+.anki-card-manager-editor-widget.is-stack-end {
+	padding-top: 0;
+}
+
+.anki-card-manager-editor-widget.is-stack-start > .anki-card-manager-stack {
+	border-bottom-left-radius: 0;
+	border-bottom-right-radius: 0;
+	margin-bottom: 0;
+}
+
+.anki-card-manager-editor-widget.is-stack-middle > .anki-card-manager-stack {
+	border-radius: 0;
+	border-top: 0;
+	margin-bottom: 0;
+	margin-top: 0;
+}
+
+.anki-card-manager-editor-widget.is-stack-end > .anki-card-manager-stack {
+	border-top: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+	margin-top: 0;
+}
+
+.anki-card-manager-editor-widget:is(.is-stack-start, .is-stack-middle) >
+	.anki-card-manager-stack > .anki-card-manager-card:last-child {
+	border-bottom: 1px solid var(--background-modifier-border);
 }
 
 .anki-card-manager-summary {

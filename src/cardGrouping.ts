@@ -1,7 +1,7 @@
 import type { AnkiCard } from './types';
 
 /** Only whitespace may separate cards in a visual stack. Never swallow prose. */
-export function groupAdjacentCards(source: string, cards: AnkiCard[]): AnkiCard[][] {
+export function groupAdjacentCards(source: string, cards: readonly AnkiCard[]): AnkiCard[][] {
 	const groups: AnkiCard[][] = [];
 	for (const card of cards) {
 		const group = groups[groups.length - 1];

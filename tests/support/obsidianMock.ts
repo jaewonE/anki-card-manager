@@ -26,7 +26,9 @@ export class MarkdownRenderChild extends Component { constructor(readonly contai
 // Only Obsidian's host APIs are mocked. The extension, widgets, renderer,
 // CodeMirror state and CodeMirror DOM implementation are the real modules.
 export const MarkdownRenderer = {
+	renders: [] as string[],
 	async render(_app: unknown, markdown: string, target: HTMLElement): Promise<void> {
+		this.renders.push(markdown);
 		await Promise.resolve();
 		const range = target.ownerDocument.createRange();
 		// Test-only renderer: markdown-it escapes raw HTML (html: false).

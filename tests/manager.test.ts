@@ -215,6 +215,51 @@ test('Reading view preserves surrounding prose in one section, supports fences/c
 	} finally { for (const child of children) child.unload(); el.remove(); }
 });
 
+test('Reading view hydrates only intersecting chunks for a large adjacent stack', async () => {
+	const original = Object.getOwnPropertyDescriptor(dom.window, 'IntersectionObserver');
+	class FakeIntersectionObserver {
+		static instances: FakeIntersectionObserver[] = [];
+		readonly observed: Element[] = [];
+		constructor(private readonly callback: IntersectionObserverCallback) { FakeIntersectionObserver.instances.push(this); }
+		observe(target: Element): void { this.observed.push(target); }
+		unobserve(target: Element): void { const index = this.observed.indexOf(target); if (index >= 0) this.observed.splice(index, 1); }
+		disconnect(): void { this.observed.length = 0; }
+		trigger(target: Element): void {
+			this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+		}
+	}
+	Object.defineProperty(dom.window, 'IntersectionObserver', { configurable: true, value: FakeIntersectionObserver });
+	const source = Array.from({ length: 60 }, (_, index) => basic(`Large ${index}`)).join('\n');
+	const children: MarkdownRenderChild[] = [];
+	const render = harness.createReadingPostProcessor(appFor().app, () => harness.DEFAULT_SETTINGS, () => false, () => {});
+	const el = dom.window.document.body.createDiv();
+	const ctx = { sourcePath: 'large.md', getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: source.split('\n').length }),
+		addChild: (child: MarkdownRenderChild) => { child.load(); children.push(child); } } as unknown as MarkdownPostProcessorContext;
+	try {
+		await render(el, ctx);
+		assert.equal(el.querySelectorAll('.is-stack-chunk').length, 3);
+		assert.equal(el.querySelectorAll('details').length, 0);
+		const observer = FakeIntersectionObserver.instances[0]!;
+		assert.equal(observer.observed.length, 3);
+		observer.trigger(observer.observed[0]!);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.equal(el.querySelectorAll('details').length, 24);
+		assert.equal(el.querySelectorAll('.anki-card-manager-answer').length, 0);
+		const first = el.querySelector('details')!;
+		first.open = true;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.equal(first.querySelectorAll('.anki-card-manager-answer').length, 1);
+		await new Promise((resolve) => setTimeout(resolve, 120));
+		assert.equal(el.querySelectorAll('details').length, 60, 'background batches make direct jumps reliable');
+	} finally {
+		for (const child of children) child.unload();
+		el.remove();
+		if (original) Object.defineProperty(dom.window, 'IntersectionObserver', original);
+		else Reflect.deleteProperty(dom.window, 'IntersectionObserver');
+	}
+	assert.equal(harness.Component.active, 0);
+});
+
 test('placement journal validates and verifies durable backups and archives without overwriting', async () => {
 	const files = new Map<string, string>(); const directories = new Set<string>();
 	const app = { vault: { configDir: '.config', adapter: {

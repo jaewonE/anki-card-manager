@@ -55,7 +55,14 @@ for (const [version, packageName] of [
 		let blocked: boolean;
 		let errors: unknown[];
 		let outside: HTMLButtonElement;
-		beforeEach(() => { errors = []; placement = 'inline'; truncateTitles = false; markers = { ...DEFAULT_MARKERS }; blocked = false; });
+		beforeEach(() => {
+			errors = [];
+			placement = 'inline';
+			truncateTitles = false;
+			markers = { ...DEFAULT_MARKERS };
+			blocked = false;
+			if (harness) harness.MarkdownRenderer.renders.length = 0;
+		});
 
 		before(async () => {
 			dom = new JSDOM('<!doctype html><body><button>Outside</button></body>', {
@@ -103,7 +110,7 @@ for (const [version, packageName] of [
 			win.addEventListener('error', (event) => { errors.push(event.error); event.preventDefault(); });
 		});
 
-		function open(doc = documentText, anchor = 251): EditorViewType {
+		function open(doc = documentText, anchor = 251, parseCards = parseAnkiCards): EditorViewType {
 			errors = [];
 			placement = 'inline';
 			view = new cm.EditorView({
@@ -114,7 +121,7 @@ for (const [version, packageName] of [
 					extensions: [
 						harness.editorInfoField,
 						harness.editorLivePreviewField,
-						harness.createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles, () => markers, () => blocked),
+						harness.createAnkiCardEditorExtension({} as App, () => placement, () => truncateTitles, () => markers, () => blocked, parseCards),
 						cm.EditorView.exceptionSink.of((error) => errors.push(error)),
 					],
 				}),
@@ -176,6 +183,7 @@ for (const [version, packageName] of [
 			const editor = open(source, 0);
 			await settle();
 			editor.dom.querySelector('details')!.open = true;
+			await settle();
 			editor.dom.querySelector<HTMLButtonElement>('.anki-card-manager-type-selector')!.click();
 			assert.deepEqual(Array.from(harness.Menu.last!.items, (item) => item.title), ['Obsidian-Basic', 'Cloze']);
 			harness.Menu.last!.items[0]!.callback();
@@ -225,12 +233,63 @@ for (const [version, packageName] of [
 			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-stack details').length, 2);
 			assert.equal(editor.dom.querySelectorAll('.is-title-truncated').length, 0);
 			assert.equal(editor.dom.querySelectorAll('summary .anki-card-manager-badge').length, 0);
-			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-answer-header .anki-card-manager-badge').length, 3);
+			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-answer-header .anki-card-manager-badge').length, 0);
+			editor.dom.querySelector('details')!.open = true;
+			await settle();
+			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-answer-header .anki-card-manager-badge').length, 1);
 			truncateTitles = true;
 			editor.dispatch({});
 			await settle();
 			assert.equal(editor.dom.querySelectorAll('.is-title-truncated').length, 3);
 			assert.equal(editor.state.doc.toString(), source);
+		});
+
+		test('large adjacent stacks use bounded widgets and render answers only when opened', async () => {
+			const largeCard = (index: number): string =>
+				`<ANKI_START>\nObsidian-Basic\nQuestion ${index}\nBack:\nAnswer ${index}\n<ANKI_END>`;
+			const source = `intro\n${Array.from({ length: 120 }, (_, index) => largeCard(index)).join('\n\n')}`;
+			const editor = open(source, 0);
+			await settle();
+			let decorationCount = 0;
+			for (const value of editor.state.facet(cm.EditorView.decorations)) {
+				if (typeof value !== 'function') value.between(0, editor.state.doc.length, () => { decorationCount += 1; });
+			}
+			assert.equal(decorationCount, 5);
+			const stackSizes = Array.from(editor.dom.querySelectorAll('.anki-card-manager-stack'),
+				(stack) => stack.querySelectorAll('details').length);
+			assert.deepEqual(stackSizes, [24, 24, 24, 24, 24]);
+			assert.ok(stackSizes.every((size) => size <= 24));
+			assert.equal(editor.dom.querySelectorAll('.anki-card-manager-answer').length, 0);
+			assert.equal(harness.MarkdownRenderer.renders.some((markdown) => markdown.startsWith('Answer ')), false);
+			const first = editor.dom.querySelector('details')!;
+			first.open = true;
+			await settle();
+			assert.equal(first.querySelectorAll('.anki-card-manager-answer').length, 1);
+			assert.equal(harness.MarkdownRenderer.renders.some((markdown) => markdown.startsWith('Answer ')), true);
+		});
+
+		test('selection and presentation changes reuse parsed cards until source or markers change', async () => {
+			let parseCalls = 0;
+			const countingParser: typeof parseAnkiCards = (...args) => {
+				parseCalls += 1;
+				return parseAnkiCards(...args);
+			};
+			const editor = open(`intro\n${card}\ntail`, 0, countingParser);
+			await settle();
+			assert.equal(parseCalls, 1);
+			editor.dispatch({ selection: { anchor: 1 } });
+			truncateTitles = true;
+			placement = 'document-end';
+			editor.dispatch({});
+			await settle();
+			assert.equal(parseCalls, 1);
+			editor.dispatch({ changes: { from: 0, insert: 'x' } });
+			await settle();
+			assert.equal(parseCalls, 2);
+			markers = { ...markers, registeredStart: '[START]' };
+			editor.dispatch({});
+			await settle();
+			assert.equal(parseCalls, 3);
 		});
 
 		test('Cloze masks are independent, preserve Markdown, toggle all and reset on close', async () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- Partition large adjacent card stacks into bounded 24-card widgets with collapsed-height estimates, retaining the stable CodeMirror StateField decoration and atomic-range architecture.
+- Cache the parsed editor projection across focus, selection and presentation-only updates; reparse only when source text, source path or card triggers change.
+- Render answer Markdown and controls only on first expansion, while preserving open cards across widget recycling and source mutations.
+- Prioritize Reading-view chunks near the viewport, hydrate the remainder in bounded background batches for reliable direct jumps, preserve surrounding prose and continuous stack styling, and add large-stack, parse-cache, lazy-answer and intersection regressions.
+
 ## 0.3.1
 
 - Seed every sampling execution from the current time so repeated runs can select different cards while retaining duplicate-safe quotas and validation.

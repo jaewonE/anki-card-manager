@@ -2,13 +2,14 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.1**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.2**.
 
 ## Features
 
 - Renders complete card blocks in Live Preview after selection/focus leaves them, and in Reading view. Obsidian Source mode always shows raw Markdown.
 - Replaces an immediately surrounding Markdown code fence when the card is its only content, so no empty fence remains around the UI. Deleting that card also removes the exclusive fence.
 - Keeps the question visible and the answer inside a collapsible section. Select the circular pencil icon (**Edit source**) to reveal and focus its raw block, including in document-end mode. Card type appears in the answer header.
+- Keeps very large notes responsive by splitting adjacent stacks into 24-card rendering chunks, caching parsed cards across selection/focus changes, and creating answer Markdown and controls only when a card is first expanded. Reading view prioritizes chunks near the viewport and hydrates the remainder in bounded background batches so direct jumps remain reliable.
 - Shows full questions by default. Optional single-line ellipsis applies only while collapsed; expanding a card always reveals the full question.
 - Uses the supplied Material Symbols Light highlighter icon for Cloze and an Anki-style card/star icon for other types: blue for registered cards and red for unregistered cards, with brighter dark-mode colors.
 - Uses a compact, centered all-edge shadow (4px blur, white in dark mode), with 6px side gutters to prevent clipping. Consecutive cards separated only by whitespace share one shadowed stack, with thin dividers and no individual rounding or shadows. Document-end collections use the same stack layout; the pencil edit button has no shadow.
@@ -208,13 +209,13 @@ npm run build
 
 The production release files are generated at the repository root.
 
-`npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
+`npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, bounded large-card chunks, parse-cache reuse, lazy answers, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
 
 Manager tests also cover persistent IndexedDB round trips, warm-cache loading, file-level create/modify/rename/delete reconciliation, complete-rebuild progress and confirmation, memory fallback, 100-row pagination, deferred large groups, required columns, deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover time-seed variation, stable results for an explicit seed, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
 
 Additional regressions cover type menus and live-editor registration, Cloze unwrapping, custom triggers across all consumers, draft settings, simultaneous literal replacement, durable backups, write/settings failures, concurrent-edit protection, and recovery after restart. Card types, separators and icon assignments are centralized in `src/cardTypes.ts` for future extension.
 
-Source/Live Preview transitions, Reading-view section boundaries/lifecycle, bottom-entry ArrowUp, physical collection/idempotence/footnotes, placement confirmation/recovery, independent group sampling modes, comma and global AND/OR search, and modal source navigation have regression coverage. Tests use sample documents, never real Vault notes.
+Source/Live Preview transitions, Reading-view section boundaries/lifecycle and intersection hydration, bottom-entry ArrowUp, physical collection/idempotence/footnotes, placement confirmation/recovery, independent group sampling modes, comma and global AND/OR search, and modal source navigation have regression coverage. Tests use sample documents, never real Vault notes.
 
 For browser layout checks, run `npm run test:browser` and open the printed editor, `/manager`, `/manager-responsive`, or `/reading` URL. Manager fixtures offer narrow pane and 320/390/640/1024px viewport checks. The fixtures use sample text only and never read or write Vault files. CodeMirror and test dependencies are not bundled into the production plugin; Obsidian supplies its own editor runtime.
 
