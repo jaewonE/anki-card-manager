@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
-import type { App, WorkspaceLeaf } from 'obsidian';
+import type { App, TFile, WorkspaceLeaf } from 'obsidian';
 import { parseAnkiCards } from '../src/parser';
 import { installDomHelpers } from './support/dom';
 import { DEFAULT_MARKERS, replaceTriggers } from '../src/markers';
@@ -31,7 +31,7 @@ before(async () => {
 		alias: { obsidian: fileURLToPath(new URL('./support/obsidianMock.ts', import.meta.url)) } });
 	const bundled = { exports: {} as Harness };
 	runInNewContext(result.outputFiles[0]!.text, { module: bundled, exports: bundled.exports,
-		require: createRequire(import.meta.url), document: dom.window.document, console, setTimeout, clearTimeout });
+		require: createRequire(import.meta.url), document: dom.window.document, window: dom.window, console, setTimeout, clearTimeout });
 	harness = bundled.exports;
 });
 after(() => dom.window.close());
@@ -51,7 +51,7 @@ function appFor(sources = fixture()) {
 			sources.set(file.path, transform(sources.get(file.path)!)); writes.push(file.path); return Promise.resolve(sources.get(file.path)!);
 		}, on: () => ({}),
 	}, workspace: { getLeavesOfType: () => [] } } as unknown as App;
-	return { app, sources, writes };
+	return { app, sources, writes, files };
 }
 
 test('physical collection preserves card bytes, YAML, order, fences, CRLF and footnotes; repeated collection is stable', () => {
@@ -740,6 +740,124 @@ test('confirmed bulk deck change writes YAML once then refreshes rows from curre
 	assert.equal(container.querySelector('[data-label=Deck]')?.textContent, 'New::Child');
 	assert.equal(dom.window.document.querySelector('.modal'), null);
 	await close();
+});
+
+test('card index loads once, skips unchanged files and handles modify, create, rename and delete incrementally', async () => {
+	const sources = fixture();
+	const { app, files } = appFor(sources);
+	const reads = new Map<string, number>();
+	const cachedRead = app.vault.cachedRead.bind(app.vault);
+	app.vault.cachedRead = async (file) => {
+		reads.set(file.path, (reads.get(file.path) ?? 0) + 1);
+		return cachedRead(file);
+	};
+	for (const file of app.vault.getMarkdownFiles()) {
+		const source = sources.get(file.path)!;
+		file.stat.mtime = 1; file.stat.size = source.length;
+	}
+	const store = new harness.MemoryCardIndexStore();
+	const index = new harness.CardIndexService(app, () => DEFAULT_MARKERS, 'test-index', store);
+	await index.initialize();
+	assert.equal(index.snapshot().cards.length, 0);
+	await index.refresh();
+	assert.equal(index.snapshot().cards.length, 3);
+	assert.ok(index.snapshot().cards.every((card) => card.search?.all.length), 'normalized search fields are created while indexing');
+	assert.deepEqual([...reads.values()], [1, 1]);
+	await index.refresh();
+	assert.deepEqual([...reads.values()], [1, 1], 'warm reconcile does not read unchanged Markdown');
+
+	const file = app.vault.getAbstractFileByPath('a.md') as unknown as InstanceType<typeof harness.TFile>;
+	sources.set('a.md', sources.get('a.md')! + basic('Four'));
+	file.stat.mtime = 2; file.stat.size = sources.get('a.md')!.length;
+	await index.refresh();
+	assert.equal(index.snapshot().cards.length, 4);
+	assert.deepEqual([...reads.entries()], [['a.md', 2], ['b.md', 1]]);
+
+	const created = new harness.TFile();
+	created.path = 'created.md';
+	const createdSource = yaml + basic('Created');
+	created.stat = { mtime: 1, ctime: 1, size: createdSource.length };
+	sources.set(created.path, createdSource); files.set(created.path, created);
+	index.schedule(created as unknown as TFile); index.schedule(created as unknown as TFile);
+	await new Promise((resolve) => setTimeout(resolve, 400));
+	assert.equal(reads.get('created.md'), 1, 'rapid events are coalesced by file path');
+	assert.equal(index.snapshot().cards.length, 5);
+
+	files.delete('created.md'); sources.delete('created.md');
+	created.path = 'renamed.md'; created.stat.mtime = 2;
+	files.set(created.path, created); sources.set(created.path, createdSource);
+	await index.rename(created as unknown as TFile, 'created.md');
+	assert.ok(index.snapshot().cards.some((card) => card.sourcePath === 'renamed.md'));
+	assert.ok(index.snapshot().cards.every((card) => card.sourcePath !== 'created.md'));
+
+	const markdownFiles = app.vault.getMarkdownFiles();
+	app.vault.getMarkdownFiles = () => markdownFiles.filter((candidate) => candidate.path !== 'b.md');
+	await index.refresh();
+	assert.equal(index.snapshot().cards.length, 4);
+	assert.ok(index.snapshot().cards.every((card) => card.sourcePath !== 'b.md'));
+
+	index.dispose();
+	const warm = new harness.CardIndexService(app, () => DEFAULT_MARKERS, 'test-index', store);
+	await warm.initialize();
+	assert.equal(warm.snapshot().cards.length, 4, 'persisted projection is available before reconciliation');
+	assert.deepEqual([...reads.entries()], [['a.md', 2], ['b.md', 1], ['created.md', 1], ['renamed.md', 1]]);
+	warm.dispose();
+});
+
+test('card index falls back to a rebuildable memory projection when persistent storage cannot open', async () => {
+	const { app } = appFor();
+	const failing = {
+		open: () => Promise.reject(new Error('storage unavailable')),
+		load: () => Promise.reject(new Error('storage unavailable')),
+		replaceFile: () => Promise.reject(new Error('storage unavailable')),
+		removeFile: () => Promise.reject(new Error('storage unavailable')),
+		clear: () => Promise.reject(new Error('storage unavailable')),
+		close: () => {},
+	} as ConstructorParameters<typeof harness.CardIndexService>[3];
+	const index = new harness.CardIndexService(app, () => DEFAULT_MARKERS, 'fallback-index', failing);
+	const originalError = console.error;
+	console.error = () => {};
+	try {
+		await index.initialize(); await index.refresh();
+		assert.equal(index.snapshot().persistent, false);
+		assert.equal(index.snapshot().cards.length, 3);
+	} finally { console.error = originalError; index.dispose(); }
+});
+
+test('indexed manager renders at most 100 rows per page while retaining all required columns', async () => {
+	const source = yaml + Array.from({ length: 250 }, (_, index) => basic(`Card ${String(index).padStart(3, '0')}`)).join('');
+	const { app } = appFor(new Map([['large.md', source]]));
+	const file = app.vault.getAbstractFileByPath('large.md') as unknown as InstanceType<typeof harness.TFile>;
+	file.stat.size = source.length;
+	const index = new harness.CardIndexService(app, () => DEFAULT_MARKERS, 'large-index', new harness.MemoryCardIndexStore());
+	await index.initialize(); await index.refresh();
+	const container = dom.window.document.body.createDiv();
+	const view = new harness.AnkiManagerView(new harness.WorkspaceLeaf(app, container) as unknown as WorkspaceLeaf,
+		() => DEFAULT_MARKERS, () => false, index);
+	try {
+		await view.onOpen();
+		assert.equal(container.querySelectorAll('tbody tr').length, 100);
+		assert.deepEqual([...container.querySelectorAll('thead th')].map((th) => th.textContent),
+			['', 'Question', 'Answer', 'Type', 'Deck', 'Tags', 'Source', 'Status']);
+		assert.ok(container.textContent?.includes('Page 1 of 3 · 250 cards'));
+		button(container, 'Next').click();
+		assert.equal(container.querySelectorAll('tbody tr').length, 100);
+		assert.ok(container.textContent?.includes('Page 2 of 3 · 250 cards'));
+		button(container, 'Next').click();
+		assert.equal(container.querySelectorAll('tbody tr').length, 50);
+		const search = container.querySelector<HTMLInputElement>('input[type=search]')!;
+		search.value = 'front:Card249'; search.dispatchEvent(inputEvent());
+		assert.equal(container.querySelectorAll('tbody tr').length, 1);
+		assert.equal(container.querySelector('.anki-card-manager-pagination'), null);
+		container.querySelector<HTMLButtonElement>('[data-icon="carbon--filter-reset"]')!.click();
+		button(container, 'Group by tag').click();
+		const group = container.querySelector<HTMLDetailsElement>('details')!;
+		assert.equal(group.open, false, 'large groups start collapsed and do not create hidden rows');
+		assert.equal(container.querySelectorAll('tbody tr').length, 0);
+		group.open = true; group.dispatchEvent(new dom.window.Event('toggle'));
+		assert.equal(container.querySelectorAll('tbody tr').length, 100);
+		assert.ok(container.textContent?.includes('Page 1 of 3 · 250 cards'));
+	} finally { await view.onClose(); index.dispose(); container.remove(); }
 });
 
 const custom = { registeredStart: '[RS.$]', registeredEnd: '[RE.$]', unregisteredStart: '[US.$]', unregisteredEnd: '[UE.$]' };

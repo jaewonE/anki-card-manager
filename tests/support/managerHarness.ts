@@ -11,3 +11,5 @@ export { VaultPlacementJournal } from '../../src/placementJournal';
 export { createReadingPostProcessor } from '../../src/readingView';
 export { ConfirmCardCollectionModal } from '../../src/ui/placementSettings';
 export { Component, MarkdownView } from './obsidianMock';
+export { CardIndexService } from '../../src/cardIndex';
+export { MemoryCardIndexStore } from '../../src/cardIndexStore';

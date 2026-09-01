@@ -54,7 +54,7 @@ export function setIcon(element: HTMLElement, icon: string): void {
 	element.replaceChildren(svg);
 }
 
-export class TFile { path = 'test.md'; extension = 'md'; }
+export class TFile { path = 'test.md'; extension = 'md'; stat = { mtime: 1, ctime: 1, size: 1 }; }
 export class MarkdownView { async save(): Promise<void> { await Promise.resolve(); } }
 export class Notice {
 	static messages: string[] = [];

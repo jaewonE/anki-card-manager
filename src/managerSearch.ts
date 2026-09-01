@@ -1,9 +1,22 @@
 import type { AnkiCard } from './types';
+import type { CardSearchIndex } from './types';
 
 const PROPERTIES = /^(-?)(anki_deck|anki_tags|deck|tags?|type|front|question|back|answer|path|source|status|id)\s*:\s*/i;
 interface SearchTerm { property: string; value: string; exclude?: boolean }
 export type SearchMode = 'and' | 'or';
 const normalize = (value: string): string => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, '');
+
+export function createCardSearchIndex(card: AnkiCard): CardSearchIndex {
+	const front = normalize(card.front);
+	const back = normalize(card.back);
+	const cardType = normalize(card.cardType);
+	const deck = normalize(card.deck);
+	const tags = card.tags.map(normalize);
+	const sourcePath = normalize(card.sourcePath);
+	const id = normalize(card.id ?? '');
+	return { front, back, cardType, deck, tags, sourcePath, id,
+		all: [front, back, cardType, deck, ...tags, sourcePath, id] };
+}
 
 export function parseSearch(query: string): SearchTerm[] {
 	const terms: SearchTerm[] = [];
@@ -46,19 +59,20 @@ export function matchesSearch(card: AnkiCard, terms: readonly SearchTerm[], mode
 	if (!terms.length) return true;
 	const matches = ({ property, value }: SearchTerm): boolean => {
 		const needle = normalize(value);
+		const indexed = card.search ?? createCardSearchIndex(card);
 		let haystacks: string[];
 		switch (property) {
-			case 'deck': case 'anki_deck': haystacks = [card.deck]; break;
-			case 'tag': case 'tags': case 'anki_tags': haystacks = card.tags; break;
-			case 'type': haystacks = [card.cardType]; break;
-			case 'front': case 'question': haystacks = [card.front]; break;
-			case 'back': case 'answer': haystacks = [card.back]; break;
-			case 'path': case 'source': haystacks = [card.sourcePath]; break;
-			case 'id': haystacks = [card.id ?? '']; break;
+			case 'deck': case 'anki_deck': haystacks = [indexed.deck]; break;
+			case 'tag': case 'tags': case 'anki_tags': haystacks = indexed.tags; break;
+			case 'type': haystacks = [indexed.cardType]; break;
+			case 'front': case 'question': haystacks = [indexed.front]; break;
+			case 'back': case 'answer': haystacks = [indexed.back]; break;
+			case 'path': case 'source': haystacks = [indexed.sourcePath]; break;
+			case 'id': haystacks = [indexed.id]; break;
 			case 'status': return needle === (card.registered ? 'registered' : 'unregistered');
-			default: haystacks = [card.front, card.back, card.cardType, card.deck, ...card.tags, card.sourcePath, card.id ?? ''];
+			default: haystacks = indexed.all;
 		}
-		return haystacks.some((haystack) => normalize(haystack).includes(needle));
+		return haystacks.some((haystack) => haystack.includes(needle));
 	};
 	// Exclusions always narrow results, even when included terms are combined with OR.
 	if (terms.some((term) => term.exclude && matches(term))) return false;

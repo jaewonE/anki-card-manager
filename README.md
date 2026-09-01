@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.2.4**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.0**.
 
 ## Features
 
@@ -18,7 +18,7 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Backspace or ArrowUp immediately below a rendered stack enters the last card's source at its closing marker. Forward Delete is protected too; ordinary text editing and explicit selection deletion remain available.
 - Supports `Cloze` cards with `Text:` and independently revealable blanks, a reveal/hide-all toggle, and automatic hiding when the answer is closed.
 - Adds missing `anki_deck: Inbox` and `anki_tags: [Inbox]` YAML properties when a card is completed. These defaults are configurable.
-- Scans all Markdown files on demand and shows registered and unregistered cards in one searchable table.
+- Keeps a local IndexedDB projection of registered and unregistered cards. Warm opens read the saved index immediately, compare file metadata, and reparse only created, modified, renamed, or deleted Markdown files.
 - Edits or deletes the exact source block and opens the source note at the card location.
 - Toggles registration without contacting Anki. Unregistering removes standalone `<!--ID: ... -->` lines and changes the markers to `<ANKI_START>` / `<ANKI_END>`; registering changes the markers back.
 - Separates Type and Deck columns; groups decks by `::` hierarchy, with optional flat tag groups inside each deck.
@@ -26,6 +26,7 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
 - Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
+- Keeps every existing Question, Answer, Type, Deck, Tags, Source and Status column while rendering at most 100 rows per table page. Large collapsed groups defer their nested tables until opened.
 - Samples the selected unique cards by Count or Rate with fixed seed 42, optional per-group allocations, and validation that leaves selection unchanged on failure.
 
 ## Card format
@@ -82,7 +83,7 @@ Select **Registered** or **Unregistered** beside the type to toggle registration
 
 1. Type `<START_ANKI>` (or your configured registered start trigger) on its own line. If no matching closer exists before the next start, the rest of the card template and missing YAML properties are added immediately.
 2. Fill in the question and answer, then move the editor selection outside the marker block or focus another pane to see the collapsible card. Use **Edit source** to return to the raw text.
-3. Select the library ribbon icon or run **Anki Card Manager: Open card manager** to scan the vault.
+3. Select the library ribbon icon or run **Anki Card Manager: Open card manager**. A saved card index appears immediately; changed Markdown is reconciled in the background.
 4. Search or filter by status/type, group by deck and/or tag, select a question to edit, or open its source. Select cards for sampling or bulk maintenance.
 
 Source edits are direct vault writes. Keep normal backups or source control, especially before bulk maintenance. If a note changes after the manager scans it, the operation stops instead of writing to a stale range; rescan and retry.
@@ -91,7 +92,7 @@ Source edits are direct vault writes. Keep normal backups or source control, esp
 
 `anki_deck` is a single string shared by every card in a note. `Mother::Child` puts those cards in Child beneath Mother; a card belongs to one deck, not several ancestor decks. `anki_tags` is a list of independent strings, and each card inherits every tag in that note. Slashes or `::` in tags are kept as literal label text, not interpreted as deck levels.
 
-The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards.
+The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards. Each table page contains at most 100 rows and keeps all seven data columns. Groups with more than 100 cards start collapsed and do not create a hidden table until opened; each opened group has independent Previous/Next pages.
 
 The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar, padded 12px on the left. Group controls appear only when grouping is enabled and there are matching cards: **전체 접기** (Collapse all) appears whenever any group is open, including descendants; otherwise **전체 펼치기** (Expand all) opens every group.
 
@@ -101,7 +102,7 @@ Tables keep their columns and headers at every screen width, including inside ne
 
 Question and Source links share a lightly padded, bright background with subtly rounded corners. Hover and focus retain the normal text color without an underline; keyboard focus indicators remain available. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
-The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) rescans current Vault Markdown, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization.
+The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, page, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) compares the saved index with current Vault file metadata and reparses changed files, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization. Use **Rebuild card index** from the command palette for an explicit full rebuild.
 
 ### Search syntax
 
@@ -147,6 +148,7 @@ Changing the shared **group** Count/Rate mode or grouping clears allocations; ch
 
 - **Open card manager**
 - **Insert Anki card**
+- **Rebuild card index**
 
 No default hotkeys are assigned. Configure shortcuts under **Settings → Hotkeys**.
 
@@ -178,7 +180,7 @@ Successful or restored migrations retain their backup under `<configDir>/plugins
 
 ## Privacy, network access, and platform support
 
-The plugin works locally, makes no network requests, sends no telemetry, and reads or writes only Markdown files, plugin settings and trigger/placement migration backups inside the current vault. Settings are stored in the plugin's `data.json`; migration backups contain affected note contents inside the plugin folder. It does not read files outside the vault.
+The plugin works locally, makes no network requests, sends no telemetry, and reads or writes only Markdown files, plugin settings and trigger/placement migration backups inside the current vault. Settings are stored in the plugin's `data.json`; migration backups contain affected note contents inside the plugin folder. A rebuildable card projection is stored locally in browser IndexedDB and is not the source of truth; Markdown remains authoritative. If persistent browser storage is unavailable, the current session uses an in-memory index. The plugin does not read files outside the vault.
 
 `isDesktopOnly` is `false`. The editor card renderer and responsive manager are implemented with Obsidian APIs and browser-compatible code for desktop and mobile.
 
@@ -207,7 +209,7 @@ The production release files are generated at the repository root.
 
 `npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
 
-Manager tests also cover deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover reproducibility, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
+Manager tests also cover persistent IndexedDB round trips, warm-cache loading, file-level create/modify/rename/delete reconciliation, memory fallback, 100-row pagination, deferred large groups, required columns, deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover reproducibility, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
 
 Additional regressions cover type menus and live-editor registration, Cloze unwrapping, custom triggers across all consumers, draft settings, simultaneous literal replacement, durable backups, write/settings failures, concurrent-edit protection, and recovery after restart. Card types, separators and icon assignments are centralized in `src/cardTypes.ts` for future extension.
 

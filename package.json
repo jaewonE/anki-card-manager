@@ -1,6 +1,6 @@
 {
 	"name": "anki-card-manager",
-	"version": "0.2.4",
+	"version": "0.3.0",
 	"description": "Render and manage obsidian-to-anki cards across an Obsidian vault.",
 	"main": "main.js",
 	"type": "module",
@@ -32,6 +32,7 @@
 		"esbuild": "0.25.5",
 		"eslint": "^9.39.4",
 		"eslint-plugin-obsidianmd": "^0.4.0",
+		"fake-indexeddb": "^6.2.5",
 		"globals": "^17.6.0",
 		"jiti": "^2.6.1",
 		"js-yaml": "^4.3.2",
@@ -41,5 +42,8 @@
 		"tsx": "^4.20.6",
 		"typescript": "^5.8.3",
 		"typescript-eslint": "^8.59.1"
+	},
+	"dependencies": {
+		"idb": "^8.0.3"
 	}
 }

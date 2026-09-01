@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Plugin } from 'obsidian';
+import { MarkdownView, Notice, Plugin, TFile } from 'obsidian';
 import { AnkiCardAutoCompleter } from './autocomplete';
 import { createAnkiCardEditorExtension } from './editorExtension';
 import {
@@ -19,12 +19,14 @@ import {
 	ANKI_MANAGER_VIEW_TYPE,
 	AnkiManagerView,
 } from './ui/managerView';
+import { CardIndexService } from './cardIndex';
 
 export default class AnkiCardManagerPlugin extends Plugin {
 	settings!: AnkiCardManagerSettings;
 	private autoCompleter!: AnkiCardAutoCompleter;
 	private triggerJournal!: VaultTriggerJournal;
 	private placementJournal!: VaultPlacementJournal;
+	private cardIndex!: CardIndexService;
 	migrationBlocked = false;
 	migrationBusy = false;
 	triggerRecoveryPending = false;
@@ -32,6 +34,24 @@ export default class AnkiCardManagerPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		this.cardIndex = new CardIndexService(
+			this.app,
+			() => this.settings.markers,
+			`${this.manifest.id}:${this.settings.indexNamespace ?? this.app.vault.getName()}`,
+		);
+		await this.cardIndex.initialize();
+		this.registerEvent(this.app.vault.on('modify', (file) => {
+			if (file instanceof TFile) this.cardIndex.schedule(file);
+		}));
+		this.registerEvent(this.app.vault.on('create', (file) => {
+			if (file instanceof TFile) this.cardIndex.schedule(file);
+		}));
+		this.registerEvent(this.app.vault.on('delete', (file) => {
+			if (file instanceof TFile) void this.cardIndex.remove(file.path);
+		}));
+		this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
+			if (file instanceof TFile) void this.cardIndex.rename(file, oldPath);
+		}));
 		this.triggerJournal = new VaultTriggerJournal(this.app, this.manifest.id);
 		this.placementJournal = new VaultPlacementJournal(this.app, this.manifest.id);
 		this.migrationBlocked = await this.hasPendingMigration();
@@ -44,7 +64,7 @@ export default class AnkiCardManagerPlugin extends Plugin {
 
 		this.registerView(
 			ANKI_MANAGER_VIEW_TYPE,
-			(leaf) => new AnkiManagerView(leaf, () => this.settings.markers, () => this.migrationBlocked),
+			(leaf) => new AnkiManagerView(leaf, () => this.settings.markers, () => this.migrationBlocked, this.cardIndex),
 		);
 		this.registerEditorExtension(
 			createAnkiCardEditorExtension(
@@ -78,9 +98,21 @@ export default class AnkiCardManagerPlugin extends Plugin {
 				void this.autoCompleter.insertAtCursor(editor, info);
 			},
 		});
+		this.addCommand({
+			id: 'rebuild-card-index',
+			name: 'Rebuild card index',
+			callback: () => void this.rebuildCardIndex(),
+		});
 
 		this.addSettingTab(new AnkiCardManagerSettingTab(this.app, this));
-		this.app.workspace.onLayoutReady(() => this.refreshEditorDecorations());
+		this.app.workspace.onLayoutReady(() => {
+			this.refreshEditorDecorations();
+			void this.cardIndex.refresh();
+		});
+	}
+
+	onunload(): void {
+		this.cardIndex.dispose();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -90,6 +122,11 @@ export default class AnkiCardManagerPlugin extends Plugin {
 			(await this.loadData()) as Partial<AnkiCardManagerSettings>,
 		);
 		this.settings.markers = { ...DEFAULT_MARKERS, ...this.settings.markers };
+		if (!this.settings.indexNamespace) {
+			this.settings.indexNamespace = window.crypto.randomUUID?.() ??
+				`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+			await this.saveData(this.settings);
+		}
 		try { validateMarkers(this.settings.markers); }
 		catch { this.settings.markers = { ...DEFAULT_MARKERS }; new Notice('Invalid trigger settings; using default triggers. No files were changed.'); }
 		if (!CARD_TYPES.some((type) => type.name === this.settings.defaultCardType)) this.settings.defaultCardType = 'Obsidian-Basic';
@@ -173,6 +210,8 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		finally {
 			this.migrationBusy = false;
 			this.migrationBlocked = await this.hasPendingMigration();
+			try { await this.cardIndex.refresh(true); }
+			catch (error) { console.error('Anki Card Manager: index refresh after migration failed', error); }
 			await this.refreshViews();
 		}
 	}
@@ -180,13 +219,15 @@ export default class AnkiCardManagerPlugin extends Plugin {
 	private async refreshViews(): Promise<void> {
 		this.refreshEditorDecorations();
 		for (const leaf of this.app.workspace.getLeavesOfType(ANKI_MANAGER_VIEW_TYPE)) {
-			if (leaf.view instanceof AnkiManagerView) await leaf.view.refresh();
+			if (leaf.view instanceof AnkiManagerView) leaf.view.refreshState();
 		}
 	}
 
 	private async activateManagerView(): Promise<void> {
 		let leaf = this.app.workspace.getLeavesOfType(ANKI_MANAGER_VIEW_TYPE)[0];
+		let created = false;
 		if (!leaf) {
+			created = true;
 			leaf = this.app.workspace.getLeaf('tab');
 			await leaf.setViewState({
 				type: ANKI_MANAGER_VIEW_TYPE,
@@ -195,7 +236,22 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		}
 		this.app.workspace.setActiveLeaf(leaf, { focus: true });
 		const view = leaf.view;
-		if (view instanceof AnkiManagerView) await view.refresh();
-		else new Notice('Could not open the Anki card manager.');
+		if (!(view instanceof AnkiManagerView)) new Notice('Could not open the Anki card manager.');
+		else if (!created) await view.refresh();
+	}
+
+	private async rebuildCardIndex(): Promise<void> {
+		if (this.migrationBlocked) {
+			new Notice('Recover the unfinished card migration before rebuilding the index.');
+			return;
+		}
+		new Notice('Rebuilding the Anki card index…');
+		try {
+			await this.cardIndex.rebuild();
+			new Notice(`Anki card index rebuilt: ${this.cardIndex.snapshot().cards.length} cards.`);
+		} catch (error) {
+			console.error('Anki Card Manager: index rebuild failed', error);
+			new Notice(error instanceof Error ? error.message : 'Could not rebuild the Anki card index.', 10000);
+		}
 	}
 }

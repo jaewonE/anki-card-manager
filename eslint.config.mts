@@ -44,6 +44,7 @@ export default defineConfig(
 			'obsidianmd/no-global-this': 'off',
 			'obsidianmd/prefer-window-timers': 'off',
 			'obsidianmd/prefer-create-el': 'off',
+			'obsidianmd/no-tfile-tfolder-cast': 'off',
 		},
 	},
 );

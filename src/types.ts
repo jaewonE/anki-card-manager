@@ -2,6 +2,7 @@ import type { CardMarkers } from './markers';
 export type CardPlacement = 'inline' | 'document-end';
 
 export interface AnkiCardManagerSettings {
+	indexNamespace?: string;
 	cardPlacement: CardPlacement;
 	placementMigrationId?: string;
 	truncateTitles: boolean;
@@ -32,6 +33,18 @@ export interface AnkiCard {
 	endLine: number;
 	raw: string;
 	renderRaw: string;
+	search?: CardSearchIndex;
+}
+
+export interface CardSearchIndex {
+	front: string;
+	back: string;
+	cardType: string;
+	deck: string;
+	tags: string[];
+	sourcePath: string;
+	id: string;
+	all: string[];
 }
 
 export interface CardMetadata {

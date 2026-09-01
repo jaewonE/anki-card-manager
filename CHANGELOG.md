@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Persist the complete manager card projection in a local IndexedDB database and load it before reconciling changed Vault files.
+- Reindex only created, modified, renamed or deleted Markdown paths, coalesce rapid events, and retain a full rebuild command plus memory fallback.
+- Precompute normalized search fields while indexing, preserve every existing manager column and stale-write guard, and update only affected paths after card or bulk edits.
+- Render at most 100 rows per table page and defer tables for large collapsed groups, while retaining selection, grouping, sampling and accessibility behavior.
+- Add IndexedDB, warm-cache, incremental lifecycle, fallback, pagination and large-group regression coverage plus equivalent English/Korean documentation.
+
 ## 0.2.4
 
 - Add `-property:value` exclusions for every supported search property and alias, including comma lists such as `-tag:t1,t2`.

@@ -7,6 +7,7 @@ import { renderTriggerSettings } from './ui/triggerSettings';
 import { renderPlacementSettings } from './ui/placementSettings';
 
 export const DEFAULT_SETTINGS: AnkiCardManagerSettings = {
+	indexNamespace: '',
 	cardPlacement: 'inline',
 	placementMigrationId: '',
 	truncateTitles: false,
