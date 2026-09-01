@@ -45,6 +45,11 @@ test('IndexedDB index atomically replaces file rows and persists every manager c
 	]);
 	assert.deepEqual((await reopened.load()).cards.filter((value) => value.sourcePath === 'a.md'), [changed],
 		'concurrent replacements leave only the final transaction projection');
+	const complete = await reopened.load();
+	await reopened.clear();
+	await reopened.replaceFile(record('b.md', 0), []);
+	await reopened.replaceAll(complete);
+	assert.deepEqual(await reopened.load(), complete, 'a complete snapshot replaces a partial index atomically');
 	await reopened.removeFile('a.md');
 	assert.deepEqual((await reopened.load()).cards.map((value) => value.sourcePath), ['b.md']);
 	reopened.close();

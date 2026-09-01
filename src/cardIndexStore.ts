@@ -21,6 +21,7 @@ export interface CardIndexStoreSnapshot {
 export interface CardIndexStore {
 	open(): Promise<void>;
 	load(): Promise<CardIndexStoreSnapshot>;
+	replaceAll(snapshot: CardIndexStoreSnapshot): Promise<void>;
 	replaceFile(file: CardIndexFileRecord, cards: readonly AnkiCard[]): Promise<void>;
 	removeFile(path: string): Promise<void>;
 	clear(): Promise<void>;
@@ -67,6 +68,22 @@ export class IndexedDbCardIndexStore implements CardIndexStore {
 			database.getAll('cards'),
 		]);
 		return { files, cards };
+	}
+
+	async replaceAll(snapshot: CardIndexStoreSnapshot): Promise<void> {
+		const database = await this.getDatabase();
+		const transaction = database.transaction(['files', 'cards'], 'readwrite');
+		const fileStore = transaction.objectStore('files');
+		const cardStore = transaction.objectStore('cards');
+		await Promise.all([
+			fileStore.clear(),
+			cardStore.clear(),
+		]);
+		await Promise.all([
+			...snapshot.files.map((file) => fileStore.put(file)),
+			...snapshot.cards.map((card) => cardStore.put(card)),
+		]);
+		await transaction.done;
 	}
 
 	async replaceFile(file: CardIndexFileRecord, cards: readonly AnkiCard[]): Promise<void> {
@@ -124,6 +141,13 @@ export class MemoryCardIndexStore implements CardIndexStore {
 	async load(): Promise<CardIndexStoreSnapshot> {
 		await Promise.resolve();
 		return { files: [...this.files.values()], cards: [...this.cards.values()] };
+	}
+	async replaceAll(snapshot: CardIndexStoreSnapshot): Promise<void> {
+		await Promise.resolve();
+		this.files.clear();
+		this.cards.clear();
+		for (const file of snapshot.files) this.files.set(file.path, file);
+		for (const card of snapshot.cards) this.cards.set(card.key, card);
 	}
 	async replaceFile(file: CardIndexFileRecord, cards: readonly AnkiCard[]): Promise<void> {
 		await Promise.resolve();

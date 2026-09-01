@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Show matching flat-table Pagination controls at both the far right of the **Select all matching cards** toolbar and below the table, and return the manager to the top after every page change.
+- Change a successful rebuild confirmation to a blue **Done** action that closes the dialog; show a failed rebuild and its reason in explicit red status text with retry/close actions.
+- Keep the last complete projection visible during a rebuild and atomically restore the pre-rebuild saved and in-memory index if any Markdown file fails, with IndexedDB, rollback and modal regressions.
+
 ## 0.3.2
 
 - Partition large adjacent card stacks into bounded 24-card widgets with collapsed-height estimates, retaining the stable CodeMirror StateField decoration and atomic-range architecture.

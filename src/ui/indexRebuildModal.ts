@@ -11,6 +11,7 @@ export class IndexRebuildModal extends Modal {
 	private started = false;
 	private completed = false;
 	private failed = false;
+	private failureMessage = '';
 
 	constructor(app: App, private readonly source: ManagerCardSource) { super(app); }
 
@@ -34,7 +35,10 @@ export class IndexRebuildModal extends Modal {
 		this.cancel = actions.createEl('button', { text: 'Cancel' });
 		this.cancel.addEventListener('click', () => this.close());
 		this.confirm = actions.createEl('button', { text: 'Rebuild all Markdown files', cls: 'mod-warning' });
-		this.confirm.addEventListener('click', () => void this.start());
+		this.confirm.addEventListener('click', () => {
+			if (this.completed) this.close();
+			else void this.start();
+		});
 		this.unsubscribe = this.source.subscribe(() => this.renderProgress());
 		this.renderProgress();
 	}
@@ -49,6 +53,13 @@ export class IndexRebuildModal extends Modal {
 		if (this.started && !this.failed) return;
 		this.started = true;
 		this.completed = this.failed = false;
+		this.failureMessage = '';
+		this.status.classList.remove('is-error', 'is-success');
+		this.confirm.classList.remove('mod-cta');
+		this.confirm.classList.add('mod-warning');
+		this.confirm.setText('Rebuild all Markdown files');
+		this.confirm.hidden = false;
+		this.cancel.hidden = false;
 		this.confirm.disabled = true;
 		this.cancel.disabled = true;
 		this.progress.hidden = false;
@@ -59,8 +70,9 @@ export class IndexRebuildModal extends Modal {
 			new Notice(`Anki card index rebuilt: ${this.source.snapshot().cards.length} cards.`);
 		} catch (error) {
 			this.failed = true;
+			this.failureMessage = error instanceof Error ? error.message : 'Could not rebuild the Anki card index.';
 			console.error('Anki Card Manager: index rebuild failed', error);
-			new Notice(error instanceof Error ? error.message : 'Could not rebuild the Anki card index.', 10000);
+			new Notice(`Rebuild failed. The previous card index was restored. ${this.failureMessage}`, 10000);
 		}
 		this.renderProgress();
 	}
@@ -76,16 +88,26 @@ export class IndexRebuildModal extends Modal {
 		this.progress.max = Math.max(1, total);
 		this.progress.value = total === 0 && this.completed ? 1 : completed;
 		if (this.failed) {
-			this.status.setText('The rebuild failed. The manager will continue with the partially rebuilt index state.');
+			this.status.classList.add('is-error');
+			this.status.classList.remove('is-success');
+			this.status.setText(`Rebuild failed. The previous card index was restored. ${this.failureMessage}`);
 			this.confirm.setText('Try again');
+			this.confirm.classList.remove('mod-cta');
+			this.confirm.classList.add('mod-warning');
 			this.confirm.disabled = false;
 			this.cancel.setText('Close');
+			this.cancel.hidden = false;
 			this.cancel.disabled = false;
 		} else if (this.completed) {
+			this.status.classList.remove('is-error');
+			this.status.classList.add('is-success');
 			this.status.setText(`Complete · ${completed} of ${total} Markdown files · ${snapshot.cards.length} cards indexed`);
-			this.confirm.hidden = true;
-			this.cancel.setText('Close');
-			this.cancel.disabled = false;
+			this.confirm.setText('Done');
+			this.confirm.classList.remove('mod-warning');
+			this.confirm.classList.add('mod-cta');
+			this.confirm.hidden = false;
+			this.confirm.disabled = false;
+			this.cancel.hidden = true;
 		} else if (snapshot.syncing) {
 			this.status.setText(`Reindexing · ${completed} of ${total} Markdown files`);
 		}

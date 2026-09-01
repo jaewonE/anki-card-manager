@@ -53,7 +53,7 @@ createServer((request, response) => {
 	const managerHtml = html.slice(0, html.indexOf('<body>')) + `<body><style>
 	body{max-width:1400px}*{box-sizing:border-box}button,input,select,textarea{font:inherit;color:var(--text-normal);background:var(--background-primary);border:1px solid var(--background-modifier-border);border-radius:5px;padding:7px}button:disabled{opacity:.4}button{cursor:pointer}input[type=checkbox]{width:16px;height:16px}svg{width:18px;height:18px}button svg{display:block}:root{--text-on-accent:#fff;--color-green:#398851;--text-error:#d84c4c;--text-faint:#888}.modal{position:fixed;z-index:100;left:50%;top:50%;transform:translate(-50%,-50%);max-height:90vh;overflow:auto;background:var(--background-primary);padding:24px;box-shadow:0 0 0 200vmax #0008;border:1px solid var(--background-modifier-border);border-radius:10px}.modal-button-container{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}pre{white-space:pre-wrap}
 	/* Host theme interaction rules must not recolor or underline table links. */
-	#manager{max-width:100%}
+	#manager{max-width:100%;max-height:900px;overflow:auto}
 	.anki-card-manager-table button:hover,.anki-card-manager-table button:focus{color:var(--text-accent);text-decoration:underline}
 	</style><p>Manager UI regression · Real manager code, sample documents and stubbed Obsidian APIs.</p><label><input id="dark" type="checkbox">Dark mode</label>
 	<label>Pane width <select id="pane-width"><option value="100%">Auto</option><option value="320px">320</option><option value="390px">390</option><option value="640px">640</option><option value="1024px">1024</option></select></label>

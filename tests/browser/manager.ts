@@ -1,5 +1,8 @@
 import type { App, WorkspaceLeaf as ObsidianLeaf } from 'obsidian';
 import { AnkiManagerView } from '../../src/ui/managerView';
+import { CardIndexService } from '../../src/cardIndex';
+import { MemoryCardIndexStore } from '../../src/cardIndexStore';
+import { DEFAULT_MARKERS } from '../../src/markers';
 import { installDomHelpers } from '../support/dom';
 import { TFile, WorkspaceLeaf } from '../support/obsidianMock';
 
@@ -10,8 +13,15 @@ const sources = new Map([
 	['Study/software.md', '---\nanki_deck: Mother::Child\nanki_tags: [Inbox, Study/UML]\nother: keep\n---\n' + block('소프트웨어 생명 주기는 무엇인가?') + block('UML 구성 요소는 무엇인가?', true)],
 	['Study/math.md', '---\nanki_deck: Mother::Math\nanki_tags: [Inbox, Math]\n---\n' + block('미등록 수학 카드', false, false)],
 	['Inbox.md', '---\nanki_deck: Inbox\nanki_tags: []\n---\n' + block('태그가 없는 카드')],
+	['Pagination.md', '---\nanki_deck: QA::Pagination\nanki_tags: [Pagination]\n---\n' +
+		Array.from({ length: 250 }, (_, index) => block(`Pagination sample ${String(index + 1).padStart(3, '0')}`)).join('')],
 ]);
-const files = [...sources.keys()].map((path) => { const file = new TFile(); file.path = path; return file; });
+const files = [...sources].map(([path, source]) => {
+	const file = new TFile();
+	file.path = path;
+	file.stat = { mtime: 1, ctime: 1, size: source.length };
+	return file;
+});
 let writes = 0;
 let errors = 0;
 const status = document.querySelector<HTMLOutputElement>('#manager-status')!;
@@ -28,8 +38,14 @@ const app = { vault: {
 		updateStatus(); updateSources(); return Promise.resolve(source);
 	}, on: () => ({}),
 }, workspace: { getLeavesOfType: () => [] } } as unknown as App;
-const view = new AnkiManagerView(new WorkspaceLeaf(app, document.querySelector<HTMLElement>('#manager')!) as unknown as ObsidianLeaf);
-void view.onOpen();
+const cardSource = new CardIndexService(app, () => DEFAULT_MARKERS, 'browser-manager-index', new MemoryCardIndexStore());
+void (async () => {
+	await cardSource.initialize();
+	await cardSource.refresh();
+	const view = new AnkiManagerView(new WorkspaceLeaf(app, document.querySelector<HTMLElement>('#manager')!) as unknown as ObsidianLeaf,
+		() => DEFAULT_MARKERS, () => false, cardSource);
+	await view.onOpen();
+})();
 document.querySelector<HTMLInputElement>('#dark')!.addEventListener('change', (event) => {
 	document.body.classList.toggle('theme-dark', (event.target as HTMLInputElement).checked);
 });

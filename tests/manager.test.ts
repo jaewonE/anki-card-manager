@@ -858,6 +858,16 @@ test('card index loads once, skips unchanged files and handles modify, create, r
 	assert.ok(progressReports.some((value) => value.syncing && value.completed === 0 && value.total === 2));
 	assert.ok(progressReports.some((value) => value.completed === 2 && value.total === 2));
 	assert.equal(warm.snapshot().cards.length, 4);
+	const completeCards = warm.snapshot().cards.map((card) => ({ key: card.key, raw: card.raw }));
+	const workingRead = app.vault.cachedRead.bind(app.vault);
+	app.vault.cachedRead = (candidate) => candidate.path === 'a.md'
+		? Promise.reject(new Error('simulated read failure'))
+		: workingRead(candidate);
+	await assert.rejects(warm.rebuild(), /Could not rebuild 1 Markdown file \(a\.md: simulated read failure\)\./);
+	assert.deepEqual(warm.snapshot().cards.map((card) => ({ key: card.key, raw: card.raw })), completeCards,
+		'a failed complete rebuild restores the previous in-memory projection');
+	assert.deepEqual((await store.load()).cards.map((card) => ({ key: card.key, raw: card.raw })), completeCards,
+		'a failed complete rebuild restores the previous saved projection');
 	warm.dispose();
 });
 
@@ -866,6 +876,7 @@ test('card index falls back to a rebuildable memory projection when persistent s
 	const failing = {
 		open: () => Promise.reject(new Error('storage unavailable')),
 		load: () => Promise.reject(new Error('storage unavailable')),
+		replaceAll: () => Promise.reject(new Error('storage unavailable')),
 		replaceFile: () => Promise.reject(new Error('storage unavailable')),
 		removeFile: () => Promise.reject(new Error('storage unavailable')),
 		clear: () => Promise.reject(new Error('storage unavailable')),
@@ -911,12 +922,18 @@ test('indexed manager renders at most 100 rows per page while retaining all requ
 		const progress = modal.querySelector<HTMLProgressElement>('progress')!;
 		assert.equal(progress.max, 1); assert.equal(progress.value, 1);
 		assert.ok(modal.textContent?.includes('Complete · 1 of 1 Markdown files · 250 cards indexed'));
-		button(modal, 'Close').click();
+		assert.equal(button(modal, 'Done').classList.contains('mod-cta'), true);
+		button(modal, 'Done').click();
 		assert.equal(container.querySelectorAll('tbody tr').length, 100);
 		assert.deepEqual([...container.querySelectorAll('thead th')].map((th) => th.textContent),
 			['', 'Question', 'Answer', 'Type', 'Deck', 'Tags', 'Source', 'Status']);
+		assert.equal(container.querySelectorAll('.anki-card-manager-pagination').length, 2);
+		assert.equal(container.querySelector('.anki-card-manager-results-toolbar')?.lastElementChild?.getAttribute('aria-label'), 'Card table pages, top');
+		assert.equal(container.querySelector('.anki-card-manager-results > .anki-card-manager-pagination')?.getAttribute('aria-label'), 'Card table pages, bottom');
 		assert.ok(container.textContent?.includes('Page 1 of 3 · 250 cards'));
+		container.scrollTop = 600;
 		button(container, 'Next').click();
+		assert.equal(container.scrollTop, 0, 'changing pages scrolls the manager view to the top');
 		assert.equal(container.querySelectorAll('tbody tr').length, 100);
 		assert.ok(container.textContent?.includes('Page 2 of 3 · 250 cards'));
 		button(container, 'Next').click();
@@ -933,6 +950,23 @@ test('indexed manager renders at most 100 rows per page while retaining all requ
 		group.open = true; group.dispatchEvent(new dom.window.Event('toggle'));
 		assert.equal(container.querySelectorAll('tbody tr').length, 100);
 		assert.ok(container.textContent?.includes('Page 1 of 3 · 250 cards'));
+
+		button(container, 'Group by tag').click();
+		const previousCards = index.snapshot().cards.map((card) => card.key);
+		app.vault.cachedRead = () => Promise.reject(new Error('simulated modal failure'));
+		sync.click();
+		modal = dom.window.document.querySelector<HTMLElement>('.anki-card-manager-index-modal')!;
+		button(modal, 'Rebuild all Markdown files').click();
+		for (let attempt = 0; attempt < 20 && !modal.textContent?.includes('Rebuild failed'); attempt += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+		const failedStatus = modal.querySelector<HTMLElement>('[role="status"]')!;
+		assert.equal(failedStatus.classList.contains('is-error'), true);
+		assert.ok(failedStatus.textContent?.includes('The previous card index was restored.'));
+		assert.ok(failedStatus.textContent?.includes('simulated modal failure'));
+		assert.ok(button(modal, 'Try again'));
+		assert.deepEqual(index.snapshot().cards.map((card) => card.key), previousCards);
+		button(modal, 'Close').click();
 	} finally { await view.onClose(); index.dispose(); container.remove(); }
 });
 

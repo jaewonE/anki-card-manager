@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.2**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.3**.
 
 ## Features
 
@@ -27,9 +27,9 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Provides row, table, and group checkboxes for bulk registration, tag/deck changes, and deletion, with explicit scope confirmation.
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
 - Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
-- Keeps every existing Question, Answer, Type, Deck, Tags, Source and Status column while rendering at most 100 rows per table page. Large collapsed groups defer their nested tables until opened.
+- Keeps every existing Question, Answer, Type, Deck, Tags, Source and Status column while rendering at most 100 rows per table page. Flat results show matching pagination controls at the far right of the select-all toolbar and below the table, and a page change returns the manager to the top. Large collapsed groups defer their nested tables until opened.
 - Samples the selected unique cards by Count or Rate with a current-time seed on every execution, optional per-group allocations, and validation that leaves selection unchanged on failure.
-- Rebuilds the complete local card index from the header Sync icon or command palette only after confirmation, showing file-count progress while leaving source Markdown untouched.
+- Rebuilds the complete local card index from the header Sync icon or command palette only after confirmation, showing file-count progress while leaving source Markdown untouched. Success changes the confirmation button to a blue **Done** action; failure restores the complete pre-rebuild index and identifies the rollback in red text.
 
 ## Card format
 
@@ -94,7 +94,7 @@ Source edits are direct vault writes. Keep normal backups or source control, esp
 
 `anki_deck` is a single string shared by every card in a note. `Mother::Child` puts those cards in Child beneath Mother; a card belongs to one deck, not several ancestor decks. `anki_tags` is a list of independent strings, and each card inherits every tag in that note. Slashes or `::` in tags are kept as literal label text, not interpreted as deck levels.
 
-The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards. Each table page contains at most 100 rows and keeps all seven data columns. Groups with more than 100 cards start collapsed and do not create a hidden table until opened; each opened group has independent Previous/Next pages.
+The default manager view is a flat table. **Group by deck hierarchy** and **Group by tag** can be enabled separately. Together, deck hierarchy comes first and tag groups appear within each exact deck. Labels include their kind, such as **Deck: Inbox (7)** or **Tag: Inbox (7)**. Multi-tag cards appear in several tag groups, but counts and selection always use unique cards. Group checkboxes select/deselect all matching descendants, including collapsed groups; a mixed checkbox indicates partial selection. Filtering clears selections that are no longer among the matching cards. Each table page contains at most 100 rows and keeps all seven data columns. Flat results with multiple pages show identical Previous/Next controls both at the far right of the select-all toolbar and below the table; using either control scrolls the manager back to the top. Groups with more than 100 cards start collapsed and do not create a hidden table until opened; each opened group has independent Previous/Next pages.
 
 The select-all checkbox sits to the left of **Select all matching cards**, with the group control immediately after the label in the same left-aligned toolbar, padded 12px on the left. Group controls appear only when grouping is enabled and there are matching cards: **전체 접기** (Collapse all) appears whenever any group is open, including descendants; otherwise **전체 펼치기** (Expand all) opens every group.
 
@@ -104,7 +104,7 @@ Tables keep their columns and headers at every screen width, including inside ne
 
 Question and Source links share a lightly padded, bright background with subtly rounded corners. Hover and focus retain the normal text color without an underline; keyboard focus indicators remain available. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
-The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, page, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) is a manual complete-index rebuild: a confirmation dialog warns that every Markdown file will be reparsed, then a progress bar reports completed/total file counts. **Rebuild card index** from the command palette opens the same dialog. Neither path changes Markdown nor invokes Anki synchronization. Startup reconciliation and Vault create/modify/rename/delete events remain incremental and read only changed files. If a filtered type no longer exists, the type filter returns to All card types.
+The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, page, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) is a manual complete-index rebuild: a confirmation dialog warns that every Markdown file will be reparsed, then a progress bar reports completed/total file counts. On success, **Rebuild all Markdown files** becomes the blue **Done** button and closes the dialog when selected. If any file cannot be rebuilt, the saved and in-memory index are both restored to their complete pre-rebuild snapshot; the dialog states the rollback and error in red and offers retry or close. **Rebuild card index** from the command palette opens the same dialog. Neither path changes Markdown nor invokes Anki synchronization. Startup reconciliation and Vault create/modify/rename/delete events remain incremental and read only changed files. If a filtered type no longer exists, the type filter returns to All card types.
 
 ### Search syntax
 

@@ -494,6 +494,11 @@
 
 .anki-card-manager-pagination button { margin: 0; }
 
+.anki-card-manager-pagination.is-top {
+	margin-left: auto;
+	margin-top: 0;
+}
+
 .anki-card-manager-index-progress {
 	display: grid;
 	gap: var(--size-4-2);
@@ -505,6 +510,20 @@
 .anki-card-manager-index-progress [role="status"] {
 	color: var(--text-muted);
 	font-size: var(--font-ui-small);
+}
+
+.anki-card-manager-index-progress [role="status"].is-error {
+	color: var(--text-error);
+}
+
+.anki-card-manager-index-progress [role="status"].is-success {
+	color: var(--color-green);
+}
+
+.anki-card-manager-index-modal button.mod-cta {
+	background-color: var(--color-blue, #3b82f6);
+	border-color: var(--color-blue, #3b82f6);
+	color: var(--text-on-accent, #fff);
 }
 
 .anki-card-manager-table {

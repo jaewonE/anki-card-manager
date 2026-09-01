@@ -277,7 +277,11 @@ export class AnkiManagerView extends ItemView {
 				const groupContainer = this.results.createDiv({ cls: 'anki-card-manager-tag-groups' });
 				for (const group of groups) this.renderGroup(groupContainer, group, 0);
 				this.updateCollapseButton();
-			} else this.table(this.results, filtered);
+			} else {
+				this.page = Math.min(this.page, Math.max(0, Math.ceil(filtered.length / MANAGER_PAGE_SIZE) - 1));
+				this.renderPagination(toolbar, filtered.length, this.page, undefined, true);
+				this.table(this.results, filtered);
+			}
 		}
 		this.updateSelection();
 	}
@@ -389,10 +393,11 @@ export class AnkiManagerView extends ItemView {
 		this.groupPages.clear();
 	}
 
-	private renderPagination(container: HTMLElement, total: number, page: number, groupKey?: string): void {
+	private renderPagination(container: HTMLElement, total: number, page: number, groupKey?: string, top = false): void {
 		if (total <= MANAGER_PAGE_SIZE) return;
 		const pages = Math.ceil(total / MANAGER_PAGE_SIZE);
-		const navigation = container.createDiv({ cls: 'anki-card-manager-pagination', attr: { role: 'navigation', 'aria-label': 'Card table pages' } });
+		const navigation = container.createDiv({ cls: `anki-card-manager-pagination${top ? ' is-top' : ''}`,
+			attr: { role: 'navigation', 'aria-label': `Card table pages, ${top ? 'top' : 'bottom'}` } });
 		const previous = navigation.createEl('button', { text: 'Previous', attr: { type: 'button' } });
 		previous.disabled = page === 0;
 		navigation.createSpan({ text: `Page ${page + 1} of ${pages} · ${total} cards` });
@@ -401,6 +406,7 @@ export class AnkiManagerView extends ItemView {
 		const change = (nextPage: number): void => {
 			if (groupKey) this.groupPages.set(groupKey, nextPage); else this.page = nextPage;
 			this.renderResults();
+			this.contentEl.scrollTop = 0;
 		};
 		previous.addEventListener('click', () => change(page - 1));
 		next.addEventListener('click', () => change(page + 1));

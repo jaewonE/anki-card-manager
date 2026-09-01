@@ -12,6 +12,7 @@ import {
 import type {
 	CardIndexFileRecord,
 	CardIndexStore,
+	CardIndexStoreSnapshot,
 } from './cardIndexStore';
 
 const PARSER_SIGNATURE = 'anki-card-manager-parser-v1';
@@ -49,7 +50,8 @@ function markerSignature(markers: CardMarkers): string {
 }
 
 function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : 'Could not read or parse this file.';
+	if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') return error.message;
+	return 'Could not read or parse this file.';
 }
 
 export class CardIndexService implements ManagerCardSource {
@@ -169,12 +171,18 @@ export class CardIndexService implements ManagerCardSource {
 		await this.initialize();
 		if (this.rebuildPromise) return this.rebuildPromise;
 		this.rebuildPromise = this.enqueue(async () => {
-			try { await this.store.clear(); }
-			catch (error) { await this.switchToMemoryStore(error); await this.store.clear(); }
-			this.files.clear();
-			this.cardsByFile.clear();
-			this.rebuildCards();
-			await this.reconcile(true);
+			const previous = await this.store.load();
+			try {
+				try { await this.store.clear(); }
+				catch (error) { await this.switchToMemoryStore(error); await this.store.clear(); }
+				this.files.clear();
+				this.cardsByFile.clear();
+				// Keep showing the last complete projection until the replacement is ready.
+				await this.reconcile(true, true);
+			} catch (error) {
+				await this.restoreSnapshot(previous);
+				throw error;
+			}
 		}).finally(() => { this.rebuildPromise = undefined; });
 		return this.rebuildPromise;
 	}
@@ -219,7 +227,7 @@ export class CardIndexService implements ManagerCardSource {
 		}
 	}
 
-	private async reconcile(force: boolean): Promise<void> {
+	private async reconcile(force: boolean, failOnFileErrors = false): Promise<void> {
 		this.syncing = true;
 		try {
 			const markdownFiles = this.app.vault.getMarkdownFiles();
@@ -245,6 +253,14 @@ export class CardIndexService implements ManagerCardSource {
 				}
 			};
 			await Promise.all(Array.from({ length: Math.min(RECONCILE_CONCURRENCY, pending.length) }, worker));
+			if (failOnFileErrors) {
+				const failures = [...this.files.values()].filter((file) => file.error);
+				if (failures.length) {
+					const first = failures[0];
+					throw new Error(`Could not rebuild ${failures.length} Markdown ${failures.length === 1 ? 'file' : 'files'}` +
+						`${first ? ` (${first.path}: ${first.error})` : ''}.`);
+				}
+			}
 			this.rebuildCards();
 		} finally {
 			this.syncing = false;
@@ -303,6 +319,24 @@ export class CardIndexService implements ManagerCardSource {
 
 	private notify(): void {
 		for (const listener of this.listeners) listener();
+	}
+
+	private async restoreSnapshot(snapshot: CardIndexStoreSnapshot): Promise<void> {
+		try { await this.store.replaceAll(snapshot); }
+		catch (error) {
+			await this.switchToMemoryStore(error);
+			await this.store.replaceAll(snapshot);
+		}
+		this.files.clear();
+		this.cardsByFile.clear();
+		for (const file of snapshot.files) this.files.set(file.path, file);
+		for (const card of snapshot.cards) {
+			const cards = this.cardsByFile.get(card.sourcePath) ?? [];
+			cards.push(card);
+			this.cardsByFile.set(card.sourcePath, cards);
+		}
+		this.rebuildCards();
+		this.notify();
 	}
 
 	private async switchToMemoryStore(error: unknown): Promise<void> {
