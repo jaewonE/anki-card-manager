@@ -450,6 +450,19 @@
 
 .anki-card-manager-pagination button { margin: 0; }
 
+.anki-card-manager-index-progress {
+	display: grid;
+	gap: var(--size-4-2);
+	margin-top: var(--size-4-4);
+}
+
+.anki-card-manager-index-progress progress { width: 100%; }
+
+.anki-card-manager-index-progress [role="status"] {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
 .anki-card-manager-table {
 	border-collapse: collapse;
 	font-size: var(--font-ui-small);

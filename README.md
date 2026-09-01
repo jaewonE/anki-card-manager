@@ -2,7 +2,7 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.0**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.1**.
 
 ## Features
 
@@ -27,7 +27,8 @@ Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsib
 - Provides four configurable card triggers, applied only through an explicit vault-wide save/migration button with source backups and recovery.
 - Separates Search/Filter, Grouping and Change state controls, adds a discovered-card-type filter, and uses the supplied filter-reset/file-sync icons. Questions open the edit dialog without an Actions column.
 - Keeps every existing Question, Answer, Type, Deck, Tags, Source and Status column while rendering at most 100 rows per table page. Large collapsed groups defer their nested tables until opened.
-- Samples the selected unique cards by Count or Rate with fixed seed 42, optional per-group allocations, and validation that leaves selection unchanged on failure.
+- Samples the selected unique cards by Count or Rate with a current-time seed on every execution, optional per-group allocations, and validation that leaves selection unchanged on failure.
+- Rebuilds the complete local card index from the header Sync icon or command palette only after confirmation, showing file-count progress while leaving source Markdown untouched.
 
 ## Card format
 
@@ -102,7 +103,7 @@ Tables keep their columns and headers at every screen width, including inside ne
 
 Question and Source links share a lightly padded, bright background with subtly rounded corners. Hover and focus retain the normal text color without an underline; keyboard focus indicators remain available. Select a question to open **Edit Anki card**. Its type dropdown offers `Obsidian-Basic` and `Cloze`; saving uses the same Cloze-to-Basic conversion as individual cards. The clickable source location opens the note at the card in editing mode and closes the dialog without saving its draft. Cancel does not modify source. Registration/deletion are available through bulk controls rather than an Actions column.
 
-The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, page, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) compares the saved index with current Vault file metadata and reparses changed files, preserving controls and valid selections. If a filtered type no longer exists, the type filter returns to All card types. Sync does not invoke Anki synchronization. Use **Rebuild card index** from the command palette for an explicit full rebuild.
+The **Reset** icon (`carbon--filter-reset.svg`) clears the query, status/type filters, grouping, expansion, page, sampling configuration and selection. The adjacent **Sync** icon (`ant-design--file-sync-outlined.svg`) is a manual complete-index rebuild: a confirmation dialog warns that every Markdown file will be reparsed, then a progress bar reports completed/total file counts. **Rebuild card index** from the command palette opens the same dialog. Neither path changes Markdown nor invokes Anki synchronization. Startup reconciliation and Vault create/modify/rename/delete events remain incremental and read only changed files. If a filtered type no longer exists, the type filter returns to All card types.
 
 ### Search syntax
 
@@ -132,7 +133,7 @@ Bulk writes flush open note editors, validate all targets before any write, and 
 
 ### Sampling selected cards
 
-Below Change state, enable **Sampling**, choose **Count** or **Rate**, enter an amount, then select **Execute**. Sampling is off by default, with Rate **30%**. Execute keeps only the sampled cards selected and deselects the rest; it never changes card text, registration or files. Each run uses seed **42** with stable card ordering. The same candidate selection and settings produce the same result, regardless of duplicate tag rows or scan order.
+Below Change state, enable **Sampling**, choose **Count** or **Rate**, enter an amount, then select **Execute**. Sampling is off by default, with Rate **30%**. Execute keeps only the sampled cards selected and deselects the rest; it never changes card text, registration or files. Each execution uses the current time as its random seed, so repeated runs can select different cards. Stable card ordering still prevents Vault scan order and duplicate tag rows from biasing the candidate pool.
 
 - Count must be an integer from 1 to the number of selected unique cards.
 - Rate must be greater than 0 and at most 100; the total sample size is rounded up (`ceil(selected × rate / 100)`).
@@ -209,7 +210,7 @@ The production release files are generated at the repository root.
 
 `npm test` runs parser tests and real CodeMirror DOM regression tests on versions 6.38.6 and 6.43.9. These cover initial rendering, position 251, focus/blur, dropdown measurement, source editing, both placement modes, card grouping, truncation, Cloze masking/reset and source preservation, completion boundaries, keyboard/native deletion protection, repeated edits, and extension cleanup. Obsidian host APIs are stubbed; these tests do not replace an in-app Obsidian check.
 
-Manager tests also cover persistent IndexedDB round trips, warm-cache loading, file-level create/modify/rename/delete reconciliation, memory fallback, 100-row pagination, deferred large groups, required columns, deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover reproducibility, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
+Manager tests also cover persistent IndexedDB round trips, warm-cache loading, file-level create/modify/rename/delete reconciliation, complete-rebuild progress and confirmation, memory fallback, 100-row pagination, deferred large groups, required columns, deck/tag semantics, field/type search, focus/caret/IME preservation, group selection, collapse/expand and reset, type editing, confirmation scope, YAML/body preservation, duplicate-target safety, stale preflight, and partial-write reporting. Sampling tests cover time-seed variation, stable results for an explicit seed, Count/Rate boundaries, integer quota rounding, group underflow/overlap, deduplication and unchanged selection on failure.
 
 Additional regressions cover type menus and live-editor registration, Cloze unwrapping, custom triggers across all consumers, draft settings, simultaneous literal replacement, durable backups, write/settings failures, concurrent-edit protection, and recovery after restart. Card types, separators and icon assignments are centralized in `src/cardTypes.ts` for future extension.
 

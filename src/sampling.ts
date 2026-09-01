@@ -11,10 +11,10 @@ export interface GroupAllocation {
 
 const compareKeys = (a: string, b: string): number => a < b ? -1 : a > b ? 1 : 0;
 
-/** Stable source order + a fresh seed of 42 makes the same selection reproducible. */
-function shuffled(cards: readonly AnkiCard[]): AnkiCard[] {
+/** Stable source order makes the supplied seed the only source of sampling randomness. */
+function shuffled(cards: readonly AnkiCard[], initialSeed: number): AnkiCard[] {
 	const result = uniqueCards(cards).sort((a, b) => compareKeys(a.key, b.key));
-	let seed = 42;
+	let seed = initialSeed;
 	const random = (): number => {
 		let value = seed += 0x6d2b79f5;
 		value = Math.imul(value ^ value >>> 15, value | 1);
@@ -42,8 +42,9 @@ function rateQuotas(target: number, shares: number[]): number[] {
 
 /** Pure selection operation: errors never partially change the manager's selection or files. */
 export function sampleCards(selected: readonly AnkiCard[], mode: SamplingMode, value: number,
-	allocations: readonly GroupAllocation[] = [], groupMode: SamplingMode = mode): AnkiCard[] {
-	const ranked = shuffled(selected);
+	allocations: readonly GroupAllocation[] = [], groupMode: SamplingMode = mode,
+	seed = Date.now()): AnkiCard[] {
+	const ranked = shuffled(selected, seed);
 	if (!ranked.length) throw new Error('Select at least one card before sampling.');
 	if (!Number.isFinite(value) || value <= 0) throw new Error('Sampling must be a positive number.');
 	if (mode === 'count' && (!Number.isSafeInteger(value) || value > ranked.length)) {

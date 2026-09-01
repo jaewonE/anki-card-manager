@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, WorkspaceLeaf } from 'obsidian';
 import type { BulkAction } from '../bulkActions';
 import { cardMetadataFromSource } from '../metadata';
 import { collectGroupCards, groupCards, selectionState } from '../managerModel';
@@ -17,6 +17,7 @@ import { managerIconButton } from './managerIcons';
 import { ManagerSampling } from './managerSampling';
 import { fitSelectedText } from './compactSelect';
 import type { ManagerCardSource } from '../cardIndex';
+import { IndexRebuildModal } from './indexRebuildModal';
 
 export const ANKI_MANAGER_VIEW_TYPE = 'anki-card-manager-view';
 export const MANAGER_PAGE_SIZE = 100;
@@ -39,6 +40,7 @@ export class AnkiManagerView extends ItemView {
 	private scanFailures = 0;
 	private indexSyncing = false;
 	private indexPersistent = true;
+	private sourceCards?: readonly AnkiCard[];
 	private unsubscribe?: () => void;
 	private page = 0;
 	private readonly groupPages = new Map<string, number>();
@@ -80,6 +82,7 @@ export class AnkiManagerView extends ItemView {
 		this.refreshSequence += 1;
 		this.checkboxes = [];
 		this.cards = [];
+		this.sourceCards = undefined;
 		this.selected.clear();
 	}
 
@@ -117,15 +120,22 @@ export class AnkiManagerView extends ItemView {
 	private applyIndexSnapshot(): void {
 		if (!this.cardSource || !this.opened) return;
 		const snapshot = this.cardSource.snapshot();
-		const previous = new Map(this.cards.map((card) => [card.key, card.raw]));
-		this.cards = [...snapshot.cards];
+		const cardsChanged = this.sourceCards !== snapshot.cards;
+		const stateChanged = this.scanFailures !== snapshot.failures || this.indexSyncing !== snapshot.syncing ||
+			this.indexPersistent !== snapshot.persistent;
+		this.sourceCards = snapshot.cards;
 		this.scanFailures = snapshot.failures;
 		this.indexSyncing = snapshot.syncing;
 		this.indexPersistent = snapshot.persistent;
-		this.updateTypeOptions();
-		this.selected = new Set(this.cards.filter((card) => this.selected.has(card.key) &&
-			previous.get(card.key) === card.raw).map((card) => card.key));
 		if (this.syncButton) this.syncButton.disabled = snapshot.syncing;
+		if (!cardsChanged && !stateChanged) return;
+		if (cardsChanged) {
+			const previous = new Map(this.cards.map((card) => [card.key, card.raw]));
+			this.cards = [...snapshot.cards];
+			this.updateTypeOptions();
+			this.selected = new Set(this.cards.filter((card) => this.selected.has(card.key) &&
+				previous.get(card.key) === card.raw).map((card) => card.key));
+		}
 		this.renderResults();
 	}
 
@@ -139,7 +149,7 @@ export class AnkiManagerView extends ItemView {
 		this.subtitle = title.createDiv({ cls: 'anki-card-manager-subtitle' });
 		const headerActions = header.createDiv({ cls: 'anki-card-manager-header-actions' });
 		managerIconButton(headerActions, 'reset', 'Reset search, filters, grouping, sampling and selection', () => this.reset());
-		this.syncButton = managerIconButton(headerActions, 'sync', 'Sync manager index with changed Vault files (does not sync Anki)', () => void this.refresh());
+		this.syncButton = managerIconButton(headerActions, 'sync', 'Rebuild complete manager index from all Vault Markdown files', () => this.openIndexRebuild());
 		const controls = container.createDiv({ cls: 'anki-card-manager-controls' });
 		controls.createSpan({ cls: 'anki-card-manager-control-label', text: 'Search/Filter' });
 		this.search = controls.createEl('input', { type: 'search',
@@ -363,6 +373,15 @@ export class AnkiManagerView extends ItemView {
 	private async refreshPaths(paths: readonly string[]): Promise<void> {
 		if (this.cardSource) await this.cardSource.refreshPaths(paths);
 		else await this.refresh();
+	}
+
+	private openIndexRebuild(): void {
+		if (this.isBlocked()) {
+			new Notice('Recover the unfinished card migration before rebuilding the index.');
+			return;
+		}
+		if (this.cardSource) new IndexRebuildModal(this.app, this.cardSource).open();
+		else void this.refresh();
 	}
 
 	private resetResultPages(): void {

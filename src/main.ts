@@ -20,6 +20,7 @@ import {
 	AnkiManagerView,
 } from './ui/managerView';
 import { CardIndexService } from './cardIndex';
+import { IndexRebuildModal } from './ui/indexRebuildModal';
 
 export default class AnkiCardManagerPlugin extends Plugin {
 	settings!: AnkiCardManagerSettings;
@@ -101,7 +102,7 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		this.addCommand({
 			id: 'rebuild-card-index',
 			name: 'Rebuild card index',
-			callback: () => void this.rebuildCardIndex(),
+			callback: () => this.openCardIndexRebuild(),
 		});
 
 		this.addSettingTab(new AnkiCardManagerSettingTab(this.app, this));
@@ -240,18 +241,11 @@ export default class AnkiCardManagerPlugin extends Plugin {
 		else if (!created) await view.refresh();
 	}
 
-	private async rebuildCardIndex(): Promise<void> {
+	private openCardIndexRebuild(): void {
 		if (this.migrationBlocked) {
 			new Notice('Recover the unfinished card migration before rebuilding the index.');
 			return;
 		}
-		new Notice('Rebuilding the Anki card index…');
-		try {
-			await this.cardIndex.rebuild();
-			new Notice(`Anki card index rebuilt: ${this.cardIndex.snapshot().cards.length} cards.`);
-		} catch (error) {
-			console.error('Anki Card Manager: index rebuild failed', error);
-			new Notice(error instanceof Error ? error.message : 'Could not rebuild the Anki card index.', 10000);
-		}
+		new IndexRebuildModal(this.app, this.cardIndex).open();
 	}
 }

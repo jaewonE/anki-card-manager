@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Seed every sampling execution from the current time so repeated runs can select different cards while retaining duplicate-safe quotas and validation.
+- Make the manager header Sync icon and `Rebuild card index` command open the same complete-rebuild confirmation dialog.
+- Show completed/total Markdown file progress during a full rebuild, retain incremental startup and Vault-event updates, and avoid table rerenders for progress-only notifications.
+- Add time-seed, rebuild progress and confirmation regressions plus equivalent English/Korean documentation.
+
 ## 0.3.0
 
 - Persist the complete manager card projection in a local IndexedDB database and load it before reconciling changed Vault files.

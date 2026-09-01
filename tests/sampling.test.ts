@@ -10,13 +10,27 @@ const allocation = (key: string, value: number, pool: AnkiCard[]): GroupAllocati
 const keys = (values: AnkiCard[]) => values.map((card) => card.key);
 const countIn = (values: AnkiCard[], pool: AnkiCard[]) => values.filter((card) => pool.includes(card)).length;
 
-test('sampling is deterministic with seed 42, independent of input order and duplicate rows', () => {
-	const result = sampleCards(cards, 'count', 10);
+test('sampling uses the supplied time seed while remaining independent of input order and duplicate rows', () => {
+	const result = sampleCards(cards, 'count', 10, [], 'count', 1_700_000_000_000);
 	assert.equal(result.length, 10); assert.equal(new Set(keys(result)).size, 10);
-	assert.deepEqual(keys(sampleCards([...cards].reverse(), 'count', 10)), keys(result));
-	assert.deepEqual(keys(sampleCards([...cards, ...cards], 'count', 10)), keys(result));
+	assert.deepEqual(keys(sampleCards([...cards].reverse(), 'count', 10, [], 'count', 1_700_000_000_000)), keys(result));
+	assert.deepEqual(keys(sampleCards([...cards, ...cards], 'count', 10, [], 'count', 1_700_000_000_000)), keys(result));
+	assert.notDeepEqual(keys(sampleCards(cards, 'count', 10, [], 'count', 1_700_000_000_001)), keys(result));
 	assert.ok(result.every((card) => cards.includes(card)));
 	assert.deepEqual(cards.map((card) => card.front), Array.from({ length: 100 }, (_, index) => `Q${index}`));
+});
+
+test('sampling defaults to the current timestamp for each execution', () => {
+	const originalNow = Date.now;
+	try {
+		Date.now = () => 1_700_000_000_000;
+		const first = sampleCards(cards, 'count', 10);
+		Date.now = () => 1_700_000_000_001;
+		const second = sampleCards(cards, 'count', 10);
+		assert.notDeepEqual(keys(second), keys(first));
+	} finally {
+		Date.now = originalNow;
+	}
 });
 
 test('Count validates whole positive sizes; Rate validates (0,100] and rounds total upward', () => {
@@ -76,12 +90,12 @@ test('group allocations validate budgets, signs, integers and finite values', ()
 test('overlapping tag and parent/child groups never count a card twice and ignore unselected members', () => {
 	const selected = cards.slice(0, 20);
 	const groups = [allocation('parent', 4, cards.slice(0, 10)), allocation('child', 2, cards.slice(0, 3))];
-	const result = sampleCards(selected, 'count', 10, groups);
+	const result = sampleCards(selected, 'count', 10, groups, 'count', 1234);
 	assert.equal(result.length, 10); assert.equal(new Set(keys(result)).size, 10);
 	assert.equal(countIn(result, cards.slice(0, 3)), 2);
 	assert.equal(countIn(result, cards.slice(0, 10)), 6);
 	assert.ok(result.every((card) => selected.includes(card)));
-	assert.deepEqual(keys(sampleCards([...selected].reverse(), 'count', 10, [...groups].reverse())), keys(result));
+	assert.deepEqual(keys(sampleCards([...selected].reverse(), 'count', 10, [...groups].reverse(), 'count', 1234)), keys(result));
 });
 
 test('insufficient remainder fails after sampling without mutating the original selection', () => {

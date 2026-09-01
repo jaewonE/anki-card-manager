@@ -660,7 +660,7 @@ test('deck + tag groups support unique selection, mixed state, duplicates and re
 	assert.equal(container.querySelectorAll('details').length, 0);
 	assert.ok(container.textContent?.includes('0 selected'));
 	assert.equal(button(container, 'Group by tag').getAttribute('aria-pressed'), 'false');
-	assert.equal(container.querySelector('[aria-label^="Sync manager"]')?.getAttribute('data-icon'), 'ant-design--file-sync-outlined');
+	assert.equal(container.querySelector('[aria-label^="Rebuild complete manager index"]')?.getAttribute('data-icon'), 'ant-design--file-sync-outlined');
 	await close();
 });
 
@@ -687,7 +687,7 @@ test('bulk tag replace and deletion run through confirmation and clear selection
 	await close();
 });
 
-test('reset clears query and status, and sync preserves them without losing input focus', async () => {
+test('reset clears query and status, and incremental refresh preserves them without losing input focus', async () => {
 	const { container, view, close } = await openView();
 	const search = container.querySelector<HTMLInputElement>('input[type=search]')!;
 	const status = container.querySelector('select')!;
@@ -801,6 +801,18 @@ test('card index loads once, skips unchanged files and handles modify, create, r
 	await warm.initialize();
 	assert.equal(warm.snapshot().cards.length, 4, 'persisted projection is available before reconciliation');
 	assert.deepEqual([...reads.entries()], [['a.md', 2], ['b.md', 1], ['created.md', 1], ['renamed.md', 1]]);
+	const progressReports: { completed: number; total: number; syncing: boolean }[] = [];
+	const unsubscribe = warm.subscribe(() => {
+		const snapshot = warm.snapshot();
+		progressReports.push({ ...snapshot.progress, syncing: snapshot.syncing });
+	});
+	await warm.rebuild();
+	unsubscribe();
+	assert.equal(warm.snapshot().progress.completed, 2);
+	assert.equal(warm.snapshot().progress.total, 2);
+	assert.ok(progressReports.some((value) => value.syncing && value.completed === 0 && value.total === 2));
+	assert.ok(progressReports.some((value) => value.completed === 2 && value.total === 2));
+	assert.equal(warm.snapshot().cards.length, 4);
 	warm.dispose();
 });
 
@@ -836,6 +848,25 @@ test('indexed manager renders at most 100 rows per page while retaining all requ
 		() => DEFAULT_MARKERS, () => false, index);
 	try {
 		await view.onOpen();
+		const sync = container.querySelector<HTMLButtonElement>('[aria-label^="Rebuild complete manager index"]')!;
+		sync.click();
+		let modal = dom.window.document.querySelector<HTMLElement>('.anki-card-manager-index-modal')!;
+		assert.ok(modal.textContent?.includes('reparses every Markdown file'));
+		assert.ok(modal.textContent?.includes('Source Markdown and Anki are not changed'));
+		assert.equal(modal.querySelector<HTMLProgressElement>('progress')!.hidden, true);
+		button(modal, 'Cancel').click();
+		assert.equal(dom.window.document.querySelector('.anki-card-manager-index-modal'), null);
+		sync.click();
+		modal = dom.window.document.querySelector<HTMLElement>('.anki-card-manager-index-modal')!;
+		button(modal, 'Rebuild all Markdown files').click();
+		assert.equal(modal.querySelector<HTMLProgressElement>('progress')!.hidden, false);
+		for (let attempt = 0; attempt < 20 && !modal.textContent?.includes('Complete'); attempt += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 5));
+		}
+		const progress = modal.querySelector<HTMLProgressElement>('progress')!;
+		assert.equal(progress.max, 1); assert.equal(progress.value, 1);
+		assert.ok(modal.textContent?.includes('Complete · 1 of 1 Markdown files · 250 cards indexed'));
+		button(modal, 'Close').click();
 		assert.equal(container.querySelectorAll('tbody tr').length, 100);
 		assert.deepEqual([...container.querySelectorAll('thead th')].map((th) => th.textContent),
 			['', 'Question', 'Answer', 'Type', 'Deck', 'Tags', 'Source', 'Status']);

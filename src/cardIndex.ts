@@ -23,6 +23,12 @@ export interface CardIndexSnapshot {
 	failures: number;
 	syncing: boolean;
 	persistent: boolean;
+	progress: CardIndexProgress;
+}
+
+export interface CardIndexProgress {
+	completed: number;
+	total: number;
 }
 
 export interface ManagerCardSource {
@@ -30,6 +36,7 @@ export interface ManagerCardSource {
 	subscribe(listener: () => void): () => void;
 	refresh(force?: boolean): Promise<void>;
 	refreshPaths(paths: readonly string[]): Promise<void>;
+	rebuild(): Promise<void>;
 }
 
 function markerSignature(markers: CardMarkers): string {
@@ -54,8 +61,10 @@ export class CardIndexService implements ManagerCardSource {
 	private cards: AnkiCard[] = [];
 	private syncing = false;
 	private persistent = true;
+	private progress: CardIndexProgress = { completed: 0, total: 0 };
 	private initialized = false;
 	private refreshPromise?: Promise<void>;
+	private rebuildPromise?: Promise<void>;
 	private fallbackPromise?: Promise<void>;
 	private scheduleTimer?: number;
 	private operationTail: Promise<void> = Promise.resolve();
@@ -102,6 +111,7 @@ export class CardIndexService implements ManagerCardSource {
 			failures: [...this.files.values()].filter((file) => file.error).length,
 			syncing: this.syncing,
 			persistent: this.persistent,
+			progress: this.progress,
 		};
 	}
 
@@ -155,15 +165,18 @@ export class CardIndexService implements ManagerCardSource {
 	}
 
 	async rebuild(): Promise<void> {
+		if (this.rebuildPromise) return this.rebuildPromise;
 		await this.initialize();
-		return this.enqueue(async () => {
+		if (this.rebuildPromise) return this.rebuildPromise;
+		this.rebuildPromise = this.enqueue(async () => {
 			try { await this.store.clear(); }
 			catch (error) { await this.switchToMemoryStore(error); await this.store.clear(); }
 			this.files.clear();
 			this.cardsByFile.clear();
 			this.rebuildCards();
 			await this.reconcile(true);
-		});
+		}).finally(() => { this.rebuildPromise = undefined; });
+		return this.rebuildPromise;
 	}
 
 	dispose(): void {
@@ -190,12 +203,14 @@ export class CardIndexService implements ManagerCardSource {
 
 	private async updatePaths(paths: readonly string[]): Promise<void> {
 		this.syncing = true;
+		this.progress = { completed: 0, total: paths.length };
 		this.notify();
 		try {
 			for (const path of paths) {
 				const file = this.app.vault.getAbstractFileByPath(path);
 				if (file instanceof TFile && file.extension === 'md') await this.indexFile(file);
 				else await this.removePath(path);
+				this.advanceProgress();
 			}
 			this.rebuildCards();
 		} finally {
@@ -206,7 +221,6 @@ export class CardIndexService implements ManagerCardSource {
 
 	private async reconcile(force: boolean): Promise<void> {
 		this.syncing = true;
-		this.notify();
 		try {
 			const markdownFiles = this.app.vault.getMarkdownFiles();
 			const paths = new Set(markdownFiles.map((file) => file.path));
@@ -217,12 +231,17 @@ export class CardIndexService implements ManagerCardSource {
 				return force || !indexed || indexed.mtime !== file.stat.mtime || indexed.size !== file.stat.size ||
 					indexed.parserSignature !== PARSER_SIGNATURE || indexed.markerSignature !== signature;
 			});
+			this.progress = { completed: 0, total: pending.length };
+			this.notify();
 			let next = 0;
 			const worker = async (): Promise<void> => {
 				while (next < pending.length) {
 					const file = pending[next];
 					next += 1;
-					if (file) await this.indexFile(file);
+					if (file) {
+						await this.indexFile(file);
+						this.advanceProgress();
+					}
 				}
 			};
 			await Promise.all(Array.from({ length: Math.min(RECONCILE_CONCURRENCY, pending.length) }, worker));
@@ -273,6 +292,13 @@ export class CardIndexService implements ManagerCardSource {
 	private rebuildCards(): void {
 		this.cards = [...this.cardsByFile.values()].flat().sort((a, b) =>
 			a.sourcePath.localeCompare(b.sourcePath) || a.startLine - b.startLine);
+	}
+
+	private advanceProgress(): void {
+		const completed = Math.min(this.progress.total, this.progress.completed + 1);
+		this.progress = { ...this.progress, completed };
+		const interval = Math.max(1, Math.ceil(this.progress.total / 100));
+		if (completed === this.progress.total || completed % interval === 0) this.notify();
 	}
 
 	private notify(): void {

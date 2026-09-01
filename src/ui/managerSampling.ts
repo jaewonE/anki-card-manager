@@ -101,7 +101,8 @@ export class ManagerSampling {
 				const value = this.allocations.get(group.key)?.trim();
 				return value ? [{ key: group.key, label: `${group.kind}: ${group.name}`, cards: collectGroupCards(group), value: Number(value) }] : [];
 			});
-			const result = sampleCards(this.selected(), this.mode.value as SamplingMode, Number(this.value.value), allocations, this.groupMode);
+			const result = sampleCards(this.selected(), this.mode.value as SamplingMode, Number(this.value.value),
+				allocations, this.groupMode, Date.now());
 			this.error.empty(); this.apply(result); this.update();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Sampling failed.';
