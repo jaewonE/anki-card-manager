@@ -46,7 +46,7 @@ export class AnkiCardManagerSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Complete start markers')
 			.setDesc(
-				`Complete a line containing ${this.plugin.settings.markers.registeredStart} and add missing anki_deck and anki_tags YAML properties.`,
+				`Complete a line containing only your saved START_TRIGGER (${this.plugin.settings.markers.registeredStart}). Add missing anki_deck and anki_tags YAML properties when completing a marker or pasting complete cards with your saved START_TRIGGER and END_TRIGGER.`,
 			)
 			.addToggle((toggle) =>
 				toggle

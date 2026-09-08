@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseAnkiCards, serializeCard, unregisterCardRaw, registerCardRaw } from '../src/parser';
+import { parseAnkiCards, serializeCard, removeAnkiIdsRaw, unregisterCardRaw, registerCardRaw } from '../src/parser';
 import { hasOwnClosingMarker } from '../src/completion';
 import { groupAdjacentCards } from '../src/cardGrouping';
 import { prepareClozeMarkdown } from '../src/cloze';
@@ -49,4 +49,13 @@ test('consecutive cards share a group only across whitespace or exclusive fences
 	const malformed = `<START_ANKI>\nbroken\n${cloze}`;
 	assert.equal(parseAnkiCards(malformed).length, 1);
 	assert.equal(parseAnkiCards(malformed)[0]?.cardType, 'Cloze');
+});
+
+
+test('ID removal preserves LF/CRLF, existing blank lines and inline comments', () => {
+	for (const eol of ['\n', '\r\n']) {
+		const raw = 'Q\n\nA <!--ID: inline-->\n  <!--ID: 178705824454-->  \n<END_ANKI>'.replace(/\n/g, eol);
+		assert.equal(removeAnkiIdsRaw(raw), 'Q\n\nA <!--ID: inline-->\n<END_ANKI>'.replace(/\n/g, eol));
+		assert.equal(removeAnkiIdsRaw(removeAnkiIdsRaw(raw)), removeAnkiIdsRaw(raw));
+	}
 });

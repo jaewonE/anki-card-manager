@@ -189,7 +189,7 @@ export class AnkiManagerView extends ItemView {
 		this.selectionCount = this.bulk.createDiv({ cls: 'anki-card-manager-control-label', attr: { role: 'status' } });
 		const bulk = this.bulk.createDiv({ cls: 'anki-card-manager-bulk-buttons' });
 		this.bulkButtons = [];
-		for (const [kind, label] of [['register', 'Register'], ['unregister', 'Unregister'], ['tags', 'Change tags'], ['deck', 'Change deck'], ['delete', 'Delete']] as const) {
+		for (const [kind, label] of [['register', 'Register'], ['unregister', 'Unregister'], ['tags', 'Change tags'], ['deck', 'Change deck'], ['delete', 'Delete'], ['remove-anki-id', 'Remove ANKI ID']] as const) {
 			const button = bulk.createEl('button', { text: label, attr: { 'aria-label': `${label} selected cards` } });
 			button.addEventListener('click', () => this.openBulk(kind));
 			this.bulkButtons.push(button);

@@ -104,6 +104,7 @@ for (const [version, packageName] of [
 				createDiv: (options: DomElementInfo) => createElement(win.document, 'div', options),
 				queueMicrotask,
 				document: win.document,
+				window: win,
 				console: { error: (...args: unknown[]) => errors.push(args) },
 			});
 			harness = bundled.exports;
@@ -401,6 +402,31 @@ for (const [version, packageName] of [
 			const disabled = textEditor('<START_ANKI>', { line: 0, ch: 12 });
 			await completer.onEditorChange(disabled.editor, info);
 			assert.equal(disabled.text(), '<START_ANKI>');
+		});
+
+		test('pasted complete custom cards add missing YAML without changing card text or existing properties', async () => {
+			const markers = { registeredStart: '[ON]', registeredEnd: '[/ON]', unregisteredStart: '[OFF]', unregisteredEnd: '[/OFF]' };
+			const settings = { autoCompleteCards: true, cardPlacement: 'inline' as const, truncateTitles: false,
+				defaultCardType: 'Cloze', defaultDeck: 'Inbox', defaultTag: 'Inbox', markers };
+			const properties: Record<string, unknown> = { anki_deck: 'Existing', other: true };
+			let writes = 0;
+			const app = { fileManager: { processFrontMatter: (_file: unknown, update: (data: Record<string, unknown>) => void) => {
+				writes++; update(properties); return Promise.resolve();
+			} } } as unknown as App;
+			const completer = new harness.AnkiCardAutoCompleter(app, () => settings);
+			const info = { file: new harness.TFile() } as MarkdownFileInfo;
+			const complete = 'Intro\n[ON]\nCloze\nQ\nText:\nA\n[/ON]\nTail';
+			const sample = textEditor(complete, { line: 8, ch: 4 });
+			const paste = (text: string) => ({ clipboardData: { getData: () => text } }) as unknown as ClipboardEvent;
+			await completer.onEditorPaste(paste(complete), sample.editor, info);
+			assert.equal(writes, 1); assert.equal(sample.text(), complete);
+			assert.equal(properties.anki_deck, 'Existing'); assert.equal(properties.other, true);
+			assert.equal(JSON.stringify(properties.anki_tags), '["Inbox"]');
+			await completer.onEditorPaste(paste('[ON]\nIncomplete'), sample.editor, info);
+			await completer.onEditorPaste(paste(complete.replace('[ON]', '<START_ANKI>').replace('[/ON]', '<END_ANKI>')), sample.editor, info);
+			settings.autoCompleteCards = false;
+			await completer.onEditorPaste(paste(complete), sample.editor, info);
+			assert.equal(writes, 1);
 		});
 
 		test('autocomplete and insert command honor custom triggers and pause during migration', async () => {

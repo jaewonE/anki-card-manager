@@ -63,6 +63,11 @@ export default class AnkiCardManagerPlugin extends Plugin {
 			() => this.migrationBlocked,
 		);
 
+		// Observe the native paste; preventing it would discard the user's text.
+		this.registerEvent(this.app.workspace.on('editor-paste', (event, editor, info) => {
+			void this.autoCompleter.onEditorPaste(event, editor, info);
+		}));
+
 		this.registerView(
 			ANKI_MANAGER_VIEW_TYPE,
 			(leaf) => new AnkiManagerView(leaf, () => this.settings.markers, () => this.migrationBlocked, this.cardIndex),

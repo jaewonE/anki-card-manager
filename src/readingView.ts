@@ -9,7 +9,7 @@ import { openCardSource } from './sourceNavigation';
 import type { AnkiCardManagerSettings } from './types';
 
 /** Obsidian splits Reading view into independently recycled Markdown sections.
- * Render each bounded stack chunk only in its starting section; omit its
+ * Render each card only in its own starting section; omit its
  * continuation in later sections while preserving prose around source ranges.
  */
 export function createReadingPostProcessor(app: App, settings: () => AnkiCardManagerSettings,
@@ -26,10 +26,12 @@ export function createReadingPostProcessor(app: App, settings: () => AnkiCardMan
 		if (!view) return;
 		hydrationTimer = view.setTimeout(() => {
 			hydrationTimer = undefined;
-			let next: QueuedHydration | undefined;
-			do next = hydrationQueue.shift();
-			while (next && (next.cancelled || !next.wrapper.isConnected || next.wrapper.dataset.hydrated === 'true'));
-			next?.run();
+			for (let count = 0; count < 24 && hydrationQueue.length; count += 1) {
+				let next: QueuedHydration | undefined;
+				do next = hydrationQueue.shift();
+				while (next && (next.cancelled || !next.wrapper.isConnected || next.wrapper.dataset.hydrated === 'true'));
+				next?.run();
+			}
 			scheduleHydration();
 		}, 25);
 	};
@@ -52,7 +54,7 @@ export function createReadingPostProcessor(app: App, settings: () => AnkiCardMan
 			const starts = [0];
 			for (let index = 0; index < source.length; index += 1) if (source[index] === '\n') starts.push(index + 1);
 			cached = { source, path: ctx.sourcePath, markers, starts,
-				chunks: chunkAdjacentCards(source, parseAnkiCards(source, ctx.sourcePath, undefined, options.markers)) };
+				chunks: chunkAdjacentCards(source, parseAnkiCards(source, ctx.sourcePath, undefined, options.markers), 1) };
 		}
 		const { starts } = cached;
 		const from = starts[info.lineStart];
@@ -123,7 +125,7 @@ export function createReadingPostProcessor(app: App, settings: () => AnkiCardMan
 			cursor = Math.min(to, chunk.to);
 		}
 		await prose(to);
-		// Empty continuation sections must not retain preview paragraph spacing.
+		// Keep recycled preview sections measurable; display:none breaks virtual scrolling.
 		el.classList.toggle('anki-card-manager-reading-continuation', !host.hasChildNodes());
 	};
 }

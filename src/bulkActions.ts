@@ -3,11 +3,11 @@ import type { App } from 'obsidian';
 import { CardConflictError } from './cardActions';
 import { cardMetadataFromSource, frontmatterRange, sourceFrontmatter } from './metadata';
 import { uniqueCards } from './managerModel';
-import { parseAnkiCards, registerCardRaw, unregisterCardRaw } from './parser';
+import { parseAnkiCards, removeAnkiIdsRaw, registerCardRaw, unregisterCardRaw } from './parser';
 import type { AnkiCard } from './types';
 
 export type BulkAction =
-	| { kind: 'register' | 'unregister' | 'delete' }
+	| { kind: 'register' | 'unregister' | 'delete' | 'remove-anki-id' }
 	| { kind: 'deck'; deck: string }
 	| { kind: 'tags'; tags: string[]; mode: 'replace' | 'add' | 'remove' };
 
@@ -77,7 +77,7 @@ export function transformBulkSource(source: string, selected: readonly AnkiCard[
 	for (const card of resolved.sort((a, b) => b.from - a.from)) {
 		const from = action.kind === 'delete' ? card.renderFrom : card.from;
 		const to = action.kind === 'delete' ? card.renderTo : card.to;
-		const replacement = action.kind === 'delete' ? '' : action.kind === 'register'
+		const replacement = action.kind === 'remove-anki-id' ? removeAnkiIdsRaw(card.raw) : action.kind === 'delete' ? '' : action.kind === 'register'
 			? registerCardRaw(card.raw, card.markers) : unregisterCardRaw(card.raw, card.markers);
 		result = result.slice(0, from) + replacement + result.slice(to);
 	}

@@ -2,7 +2,11 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager는 `obsidian-to-anki` 마커 블록을 Obsidian 안에서 간결한 접이식 카드로 보여 주고, Vault 전체 카드의 원본 Markdown을 한 화면에서 관리하게 해 주는 확장 프로그램입니다. 버전: **0.3.3**.
+Anki Card Manager는 `obsidian-to-anki` 마커 블록을 Obsidian 안에서 간결한 접이식 카드로 보여 주고, Vault 전체 카드의 원본 Markdown을 한 화면에서 관리하게 해 주는 확장 프로그램입니다. 버전: **0.4.0**.
+
+- 자동완성은 저장된 `START_TRIGGER`를 사용합니다. 저장된 시작·종료 트리거가 있는 완성된 카드를 붙여넣으면 기존 값을 유지하면서 누락된 `anki_deck`, `anki_tags` YAML을 추가합니다.
+- 읽기 화면은 각 카드의 원문 섹션에 UI를 배치하고 스크롤·섹션 재활용 중에도 이어지는 섹션의 높이를 유지합니다. 실시간 미리보기는 24개 카드 청크를 사용합니다.
+- **Change state → Remove ANKI ID**는 **Delete** 뒤에 있으며 ID 전용 주석 줄을 줄바꿈까지 제거합니다. 등록 마커, 다른 카드와 기존 빈 줄은 유지합니다. 원문의 동기화 ID만 제거하며 Anki 앱의 노트를 직접 변경하거나 삭제하지 않습니다.
 
 ## 주요 기능
 

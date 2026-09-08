@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Clarify that autocomplete uses the saved START_TRIGGER and add missing Anki YAML when complete custom-trigger cards are pasted.
+- Keep Reading view sections measurable and assign each card to its own source section for stable scrolling and recycling.
+- Add Remove ANKI ID after Delete in Change state; remove standalone ID lines including line endings without changing registration markers.
+- Update English and Korean documentation.
+
 ## 0.3.3
 
 - Show matching flat-table Pagination controls at both the far right of the **Select all matching cards** toolbar and below the table, and return the manager to the top after every page change.

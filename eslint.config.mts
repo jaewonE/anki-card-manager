@@ -37,6 +37,13 @@ export default defineConfig(
 		},
 	},
 	{
+		files: ['src/main.ts'],
+		rules: {
+			// The paste listener observes native insertion to add YAML afterward; it must not cancel it.
+			'obsidianmd/editor-drop-paste': 'off',
+		},
+	},
+	{
 		files: ['tests/**/*.ts'],
 		rules: {
 			'@typescript-eslint/no-floating-promises': 'off',

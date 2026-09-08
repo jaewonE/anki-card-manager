@@ -188,7 +188,12 @@ function replaceMarkerLine(raw: string, from: string, to: string): string {
 export function unregisterCardRaw(raw: string, markers: CardMarkers = DEFAULT_MARKERS): string {
 	let updated = replaceMarkerLine(raw, markers.registeredStart, markers.unregisteredStart);
 	updated = replaceMarkerLine(updated, markers.registeredEnd, markers.unregisteredEnd);
-	return updated.replace(/^[\t ]*<!--ID:[\t ]*[^>]*?[\t ]*-->[\t ]*(?:\r?\n|$)/gm, '');
+	return removeAnkiIdsRaw(updated);
+}
+
+/** Remove ID-only lines together with their line ending, preserving card state. */
+export function removeAnkiIdsRaw(raw: string): string {
+	return raw.replace(/^[\t ]*<!--ID:[\t ]*[^>]*?[\t ]*-->[\t ]*(?:\r?\n|$)/gm, '');
 }
 
 export function registerCardRaw(raw: string, markers: CardMarkers = DEFAULT_MARKERS): string {

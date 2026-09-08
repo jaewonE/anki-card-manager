@@ -188,9 +188,16 @@ test('Reading view renders a multi-section stack once, keeps prose, and cleans u
 		}
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		assert.equal(host.querySelectorAll('details').length, 2);
-		assert.equal(host.querySelectorAll('.anki-card-manager-stack').length, 1);
+		assert.equal(host.querySelectorAll('.anki-card-manager-stack').length, 2);
 		assert.ok(host.textContent?.includes('Before')); assert.ok(host.textContent?.includes('After'));
 		assert.ok(!host.textContent?.includes('<START_ANKI>'));
+		// Recycle the first card's owning section, as Reading view does on scroll.
+		const second = [...host.querySelectorAll('details')][1]!;
+		const firstSection = host.querySelector('details')!.closest('.anki-card-manager-reading-content')!.parentElement!;
+		firstSection.remove();
+		assert.equal(second.isConnected, true, 'later cards must not belong to a recycled earlier section');
+		assert.ok(host.textContent?.includes('Two'));
+
 		const raw = host.createDiv({ text: source }); blocked = true;
 		await render(raw, { getSectionInfo: () => ({ text: source, lineStart: 0, lineEnd: lines.length }) } as unknown as MarkdownPostProcessorContext);
 		assert.equal(raw.textContent, source);
@@ -237,13 +244,13 @@ test('Reading view hydrates only intersecting chunks for a large adjacent stack'
 		addChild: (child: MarkdownRenderChild) => { child.load(); children.push(child); } } as unknown as MarkdownPostProcessorContext;
 	try {
 		await render(el, ctx);
-		assert.equal(el.querySelectorAll('.is-stack-chunk').length, 3);
+		assert.equal(el.querySelectorAll('.is-stack-chunk').length, 60);
 		assert.equal(el.querySelectorAll('details').length, 0);
 		const observer = FakeIntersectionObserver.instances[0]!;
-		assert.equal(observer.observed.length, 3);
+		assert.equal(observer.observed.length, 60);
 		observer.trigger(observer.observed[0]!);
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		assert.equal(el.querySelectorAll('details').length, 24);
+		assert.equal(el.querySelectorAll('details').length, 1);
 		assert.equal(el.querySelectorAll('.anki-card-manager-answer').length, 0);
 		const first = el.querySelector('details')!;
 		first.open = true;
@@ -1139,4 +1146,22 @@ test('trigger settings stay draft until Apply; closing discards drafts and defau
 	assert.equal(applied, 1); assert.equal(plugin.settings.markers.registeredStart, '[MY_START]');
 	assert.equal(saves, 0, 'draft does not use ordinary immediate settings persistence');
 	tab.containerEl.remove();
+});
+
+
+test('Remove ANKI ID preserves manager state and deletes only ID lines for selected cards', async () => {
+	const { container, sources, close } = await openView();
+	try {
+		const remove = button(container, 'Remove ANKI ID');
+		assert.equal(remove.previousElementSibling?.textContent, 'Delete');
+		container.querySelector<HTMLInputElement>('[aria-label="Select all matching cards"]')!.click();
+		remove.click();
+		const modal = dom.window.document.querySelector<HTMLElement>('.modal')!;
+		button(modal, 'Confirm remove-anki-id').click();
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		for (const [path, original] of fixture()) {
+			assert.equal(sources.get(path), original.replace(/^<!--ID: .*-->\n/gm, ''));
+			assert.ok(parse(sources.get(path), path).every((card) => card.registered && !card.id));
+		}
+	} finally { await close(); }
 });

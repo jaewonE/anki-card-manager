@@ -2,7 +2,11 @@
 
 [ [English](https://github.com/jaewonE/anki-card-manager) | [한국어](https://github.com/jaewonE/anki-card-manager/blob/master/README.ko.md) ]
 
-Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.3.3**.
+Anki Card Manager turns `obsidian-to-anki` marker blocks into compact, collapsible cards in Obsidian and provides a vault-wide table for maintaining their source Markdown. Version: **0.4.0**.
+
+- Autocompletion uses the saved `START_TRIGGER`; pasting complete cards with the saved start/end triggers adds missing `anki_deck` and `anki_tags` YAML without overwriting existing values.
+- Reading view renders cards in their own source sections and keeps continuation sections measurable during scrolling and recycling. Live Preview retains 24-card chunks.
+- **Change state → Remove ANKI ID**, after **Delete**, removes ID-only comment lines including their line endings. Registration markers, other cards, and existing whitespace remain unchanged. This clears the source sync ID; it does not directly change or delete notes in Anki.
 
 ## Features
 

@@ -1,6 +1,6 @@
 import { MarkdownView, Notice, TFile } from 'obsidian';
 import type { App, Editor, MarkdownFileInfo } from 'obsidian';
-import { cardSeparator } from './parser';
+import { cardSeparator, parseAnkiCards } from './parser';
 import { hasOwnClosingMarker } from './completion';
 import { ensureAnkiFrontmatter } from './metadata';
 import type { AnkiCardManagerSettings } from './types';
@@ -36,6 +36,21 @@ export class AnkiCardAutoCompleter {
 		} finally {
 			this.inserting = false;
 		}
+	}
+
+	async onEditorPaste(event: ClipboardEvent, editor: Editor, info: MarkdownFileInfo): Promise<void> {
+		if (this.inserting || this.isBlocked() || !this.getSettings().autoCompleteCards) return;
+		const pasted = event.clipboardData?.getData('text/plain') ?? '';
+		if (!parseAnkiCards(pasted, '', undefined, this.getSettings().markers).some((card) => card.registered)) return;
+		// Let Obsidian finish its native paste before saving and updating frontmatter.
+		await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+		if (this.inserting || this.isBlocked() || !this.getSettings().autoCompleteCards) return;
+		const source = editor.getRange({ line: 0, ch: 0 },
+			{ line: editor.lastLine(), ch: editor.getLine(editor.lastLine()).length });
+		if (!parseAnkiCards(source, '', undefined, this.getSettings().markers).some((card) => card.registered)) return;
+		this.inserting = true;
+		try { await this.ensureFrontmatter(info); }
+		finally { this.inserting = false; }
 	}
 
 	async insertAtCursor(editor: Editor, info: MarkdownFileInfo): Promise<void> {
@@ -76,6 +91,11 @@ export class AnkiCardAutoCompleter {
 			editor.setCursor({ line: line + 2, ch: 0 });
 		}
 
+		await this.ensureFrontmatter(info);
+	}
+
+	private async ensureFrontmatter(info: MarkdownFileInfo): Promise<void> {
+		const settings = this.getSettings();
 		const file = info.file;
 		if (file instanceof TFile) {
 			try {

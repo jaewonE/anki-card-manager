@@ -40,7 +40,9 @@ export class BulkActionModal extends Modal {
 			const label = this.contentEl.createEl('label', { cls: 'anki-card-manager-modal-field', text: 'Tags (one per line)' });
 			input = label.createEl('textarea', { cls: 'anki-card-manager-modal-textarea', placeholder: 'Inbox\nStudy' });
 		}
-		this.contentEl.createEl('p', { text: this.kind === 'unregister'
+		this.contentEl.createEl('p', { text: this.kind === 'remove-anki-id'
+			? 'Removes Anki ID comment lines and their line endings. Manager registration markers stay unchanged. This clears the sync link; it does not directly modify or delete notes in Anki.'
+			: this.kind === 'unregister'
 			? 'Standalone Anki IDs are removed and markers are disabled. Existing notes in Anki are not deleted.'
 			: this.kind === 'delete' ? 'Selected blocks (and exclusive fences) are removed from Markdown. Existing notes in Anki are not deleted. Keep a backup before continuing.'
 				: metadata ? 'YAML formatting may be normalized. Other properties and the Markdown body are preserved. Keep a backup before bulk changes.'

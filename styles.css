@@ -588,7 +588,7 @@
 .anki-card-manager-search-mode[data-mode="or"] { background: #b9671b; color: #fff; }
 .theme-dark .anki-card-manager-search-mode[data-mode="and"] { background: #79baff; color: #172230; }
 .theme-dark .anki-card-manager-search-mode[data-mode="or"] { background: #f7b36d; color: #302017; }
-.anki-card-manager-reading-continuation { display: none; }
+.anki-card-manager-reading-continuation { min-height: 1px; margin: 0; padding: 0; }
 
 .anki-card-manager-status.is-on {
 	background: color-mix(in srgb, var(--color-green) 15%, transparent);
